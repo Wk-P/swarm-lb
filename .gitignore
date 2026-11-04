@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# 运行日志 / 实验输出（不进 git）
+*.log
+data/*
+!data/README.md

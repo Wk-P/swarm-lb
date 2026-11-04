@@ -1,0 +1,60 @@
+# Reconstructed from ~/swarm-bak/services-inspect.json (original collect_data_stack, 2026-11-04)
+version: "3.8"
+
+x-app: &app
+  image: soar009/collect_data_app:v8@sha256:7eca5baf0f1c054ba365498d81fb1ab5d94bf09feab103cc76d6611ddcaa2477
+  volumes:
+    - type: bind
+      source: /mnt/storage/collect_app_v8
+      target: /app/data
+  ports:
+    - target: 8080
+      published: 8080
+      protocol: tcp
+      mode: host
+  networks:
+    - collect_data_network
+
+services:
+  app_w1:
+    <<: *app
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.type == low
+      resources:
+        limits:
+          cpus: "0.6"
+          memory: 2G
+
+  app_w2:
+    <<: *app
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.type == middle
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+
+  app_w3:
+    <<: *app
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.type == high
+      resources:
+        limits:
+          cpus: "0.6"
+          memory: 1G
+
+networks:
+  collect_data_network:
+    driver: overlay

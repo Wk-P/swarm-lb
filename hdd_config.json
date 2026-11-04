@@ -1,0 +1,18 @@
+[
+    {   
+        "label": "high",
+        "hdd_limit_mb": 25600,
+        "mem_limit_mb": 2048
+
+    },
+    {
+        "label": "middle",
+        "hdd_limit_mb": 10240,
+        "mem_limit_mb": 2048
+    },
+    {
+        "label": "low",
+        "hdd_limit_mb": 5120,
+        "mem_limit_mb": 1024
+    }
+]

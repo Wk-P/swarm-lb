@@ -1,0 +1,14 @@
+[
+    {   
+        "label": "high",
+        "hdd_limit_mb": 25600
+    },
+    {
+        "label": "middle",
+        "hdd_limit_mb": 10240
+    },
+    {
+        "label": "low",
+        "hdd_limit_mb": 5120
+    }
+]

@@ -1,0 +1,69 @@
+version: "3.8"
+
+services:
+  app_w1:
+    image: soar009/collect_data_app:v8
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.type == low
+      resources:
+        limits:
+          cpus: '0.6'
+          memory: 2048M
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
+    networks:
+      - collect_data_network
+    volumes:
+      - /mnt/storage/collect_app_v8:/app/data
+  app_w2:
+    image: soar009/collect_data_app:v8
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.type == middle
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2048M
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
+    networks:
+      - collect_data_network
+    volumes:
+      - /mnt/storage/collect_app_v8:/app/data   
+  app_w3:
+    image: soar009/collect_data_app:v8
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.type == high
+      resources:
+        limits:
+          cpus: '0.6'
+          memory: 1024M
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
+    networks:
+      - collect_data_network
+    volumes:
+      - /mnt/storage/collect_app_v8:/app/data           
+networks:
+  collect_data_network:
+    driver: overlay
