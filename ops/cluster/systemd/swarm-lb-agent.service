@@ -1,0 +1,24 @@
+# 由 swarm-lb 仓库管理：ops/cluster/systemd/swarm-lb-agent.service  (ops/local/deploy-agents.sh 安装到所有节点)
+# 模板：@变量名@ 占位符由 ops/lib.sh 的 render 用环境参数替换
+[Unit]
+Description=swarm-lb node agent (:9100, read-only metrics) [ours]
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@REMOTE_USER@
+Group=@REMOTE_USER@
+# docker 组：读 docker.sock 拿容器列表；video 组：vcgencmd 读降频状态
+SupplementaryGroups=docker video
+Environment=PYTHONUNBUFFERED=1
+Environment=AGENT_PORT=@AGENT_PORT@
+# 只用标准库，直接用系统 python3（-I 隔离模式，不读当前目录/用户 site-packages）
+ExecStart=/usr/bin/python3 -I @AGENT_DIR@/node_agent.py
+Restart=always
+RestartSec=3
+Nice=10
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

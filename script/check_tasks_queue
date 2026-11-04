@@ -1,4 +1,0 @@
-#!/bin/bash
-source "$(dirname "$0")/../deploy/lib.sh"
-require MANAGER_IP
-curl -s "http://$MANAGER_IP:${1:-8084}/queue/status"; echo

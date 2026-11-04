@@ -1,6 +1,6 @@
 # swarm-lb 资源登记表 —— "什么跑在哪、端口归谁" 的唯一来源
-# 运维界面 (ops/) 和部署脚本 (deploy/deploy-manager.sh) 都读这个文件。
-# ${VAR} 是 .env 里的值（本机私有，模板见 .env.example），运维界面加载时展开。
+# 运维界面 (ops/cluster/ui/) 和部署脚本 (ops/local/deploy-host.sh) 都读这个文件。
+# ${VAR} 是环境参数（envs/<环境名>.env，部署后为 manager 上的 .env），运维界面加载时展开。
 #
 # owner:
 #   ours    soar009。运维界面可启停/重启；deploy 脚本会安装其 unit
@@ -11,7 +11,7 @@
 stack = "collect_data_stack"
 image = "${DOCKER_IMAGE}"
 manager_ip = "${MANAGER_IP}"
-agent_port = 9100         # 每个节点上的监控 agent（agent/node_agent.py，deploy/deploy-agents.sh 部署）
+agent_port = 9100         # 每个节点上的监控 agent（ops/cluster/agent/node_agent.py，ops/local/deploy-agents.sh 部署）
 
 [[node]]
 name = "manager"
@@ -48,8 +48,8 @@ port = 5000
 unit = "swarm-lb-ops.service"
 owner = "ours"
 title = "运维管理界面"
-script = "ops/server.py"
-managed = true            # unit 文件在本仓库 deploy/systemd/，deploy 时安装
+script = "ops/cluster/ui/server.py"
+managed = true            # unit 模板在 ops/cluster/systemd/，deploy-host.sh 安装
 self = true               # 界面自身：不提供"停止"按钮
 
 [[service]]
@@ -57,15 +57,15 @@ port = 9100
 unit = "swarm-lb-agent.service"
 owner = "ours"
 title = "节点监控 agent"
-script = "agent/node_agent.py"
-note = "所有节点都有一份（~/swarm-lb-agent/），由 deploy/deploy-agents.sh 部署；这里只列 manager 本机这份"
+script = "ops/cluster/agent/node_agent.py"
+note = "所有节点都有一份（~/swarm-lb-agent/），由 ops/local/deploy-agents.sh 部署；这里只列 manager 本机这份"
 
 [[service]]
 port = 8080
 unit = "collect_8080.service"
 owner = "ours"
 title = "v8 manager_hmsw（DQN / direct / sd_min / min_min / RR）"
-script = "manager/manager_hmsw.py"
+script = "host/manager/manager_hmsw.py"
 managed = true
 status_path = ""
 note = "开机不自启。manager_hmsw8d.py / manager_hmsw_collect.py 也写死 8080，不能同时运行"
@@ -83,7 +83,7 @@ port = 8082
 unit = "collect_8082_rr.service"
 owner = "ours"
 title = "v8 XGB 数据采集 · Round Robin"
-script = "manager/manager_xgbdata_collecter_rr.py"
+script = "host/manager/manager_xgbdata_collecter_rr.py"
 managed = true
 status_path = "/queue/status"
 note = "manager_xgbdata_collecter.py 也写死 8082，不能同时运行"
@@ -102,7 +102,7 @@ port = 8084
 unit = "collect_8084.service"
 owner = "ours"
 title = "v8 XGB 数据采集 · handle_hdd v2（RR）"
-script = "manager/manager_xgbdata_collector_handle_hdd_v2.py"
+script = "host/manager/manager_xgbdata_collector_handle_hdd_v2.py"
 managed = true
 status_path = "/queue/status"
 

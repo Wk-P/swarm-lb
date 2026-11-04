@@ -582,9 +582,6 @@ wheels = [
 name = "nvidia-cufft-cu12"
 version = "11.2.1.3"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
-]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/94/3266821f65b92b3138631e9c8e7fe1fb513804ac934485a8d05776e1dd43/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_x86_64.whl", hash = "sha256:f083fc24912aa410be21fa16d157fed2055dab1cc4b6934a0e03cba69eb242b9", size = 211459117, upload-time = "2024-04-03T20:57:40.402Z" },
 ]
@@ -874,13 +871,7 @@ wheels = [
 name = "swarm-lb"
 version = "0.8.0"
 source = { virtual = "." }
-default-groups = ["algo"]
-dependencies = [
-    { name = "aiohttp" },
-    { name = "docker" },
-    { name = "pandas" },
-    { name = "paramiko" },
-]
+default-groups = ["client", "host", "ui"]
 
 [package.dev-dependencies]
 algo = [
@@ -894,17 +885,22 @@ algo = [
     { name = "xgboost" },
 ]
 client = [
+    { name = "aiohttp" },
     { name = "psutil" },
     { name = "requests" },
 ]
+host = [
+    { name = "aiohttp" },
+    { name = "docker" },
+    { name = "pandas" },
+    { name = "paramiko" },
+]
+ui = [
+    { name = "aiohttp" },
+    { name = "docker" },
+]
 
 [package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = "==3.11.6" },
-    { name = "docker", specifier = "==7.1.0" },
-    { name = "pandas", specifier = "==3.0.1" },
-    { name = "paramiko", specifier = "==3.5.0" },
-]
 
 [package.metadata.requires-dev]
 algo = [
@@ -918,8 +914,19 @@ algo = [
     { name = "xgboost", specifier = "==2.1.2" },
 ]
 client = [
+    { name = "aiohttp", specifier = "==3.11.6" },
     { name = "psutil" },
     { name = "requests", specifier = "==2.32.3" },
+]
+host = [
+    { name = "aiohttp", specifier = "==3.11.6" },
+    { name = "docker", specifier = "==7.1.0" },
+    { name = "pandas", specifier = "==3.0.1" },
+    { name = "paramiko", specifier = "==3.5.0" },
+]
+ui = [
+    { name = "aiohttp", specifier = "==3.11.6" },
+    { name = "docker", specifier = "==7.1.0" },
 ]
 
 [[package]]
