@@ -33,6 +33,8 @@
 
 ## 注意
 
+- **2026-11-04 网段从 `x.x.x.x` 改为 `x.x.x.x`**（manager .100，worker .150/.151/.152 不变）。主线代码已改成新 IP；`legacy/` 保留原样，里面仍是旧的 `x.x.x.x`。
+
 - 线上 stack yml 原本放在旧仓库 `~/apps/docker/configures/`，`rebuild-swarm.sh` 也是从那里部署。以本仓库 `deploy/` 为准时，记得同步回节点或修改脚本路径。
 - 没有复制的：各处 `.venv`（manager_server 的 1.2G 等）、`__pycache__`、collect_data 的约 5GB 训练数据。
 - 相关但独立的仓库，未并入：`D:\github\Routing-Monitor-Docker-Request-`（`Wk-P/...`，早期 demo，已推送）。
