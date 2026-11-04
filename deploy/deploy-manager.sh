@@ -62,4 +62,4 @@ else
 fi
 
 ssh "$HOST" 'systemctl --no-pager --plain list-units "collect_*" swarm-lb-ops.service log-viewer.service | head -n -5'
-echo ">>> 运维界面: http://x.x.x.x/"
+echo ">>> 运维界面: http://x.x.x.x:5000/"

@@ -1,6 +1,6 @@
 # 由 swarm-lb 仓库管理：deploy/systemd/swarm-lb-ops.service  (deploy/deploy-manager.sh 安装)
 [Unit]
-Description=swarm-lb ops UI (:80) [ours]
+Description=swarm-lb ops UI (:5000) [ours]
 After=network-online.target docker.service
 Wants=network-online.target
 
@@ -10,8 +10,7 @@ User=pi
 Group=pi
 WorkingDirectory=/home/pi/swarm-lb/ops/
 Environment=PYTHONUNBUFFERED=1
-Environment=OPS_PORT=80
-AmbientCapabilities=CAP_NET_BIND_SERVICE
+Environment=OPS_PORT=5000
 ExecStart=/home/pi/swarm-lb/.venv/bin/python /home/pi/swarm-lb/ops/server.py
 Restart=always
 RestartSec=3

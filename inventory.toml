@@ -42,7 +42,7 @@ label = "high"
 # ---------------- Manager-Node 上的 systemd 服务（按端口） ----------------
 
 [[service]]
-port = 80
+port = 5000
 unit = "swarm-lb-ops.service"
 owner = "ours"
 title = "运维管理界面"
@@ -96,13 +96,10 @@ script = "manager/manager_xgbdata_collector_handle_hdd_v2.py"
 managed = true
 status_path = "/queue/status"
 
-[[service]]
-port = 5000
-unit = "log-viewer.service"
-owner = "ours"
-title = "（已停用）旧日志查看页 · 端口预留给新版可视化运维界面"
-script = "~/daemon-page/log-check.py"
-note = "2026-11-04 停用并 disable；unit 备份 ~/swarm-bak/systemd/20261104-202648/，旧日志归档 /mnt/udisk/archive/manager-server-logs-2025/。5000 预留给下一版运维界面"
+# 已移除：log-viewer.service（旧 Flask 日志页，原占 5000，现 5000 归运维界面）
+#   2026-11-04 停用并 disable，不要再启用（会抢 5000 端口）。
+#   unit 备份 ~/swarm-bak/systemd/20261104-202648/，代码仍在 ~/daemon-page/，
+#   旧日志归档 /mnt/udisk/archive/manager-server-logs-2025/
 
 [[service]]
 port = 8100

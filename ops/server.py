@@ -1,4 +1,4 @@
-"""swarm-lb 运维管理界面（Manager-Node :80）
+"""swarm-lb 运维管理界面（Manager-Node :5000）
 
 只读：节点、swarm 服务、manager 上所有登记的 systemd 服务、主机资源。
 可写：仅 inventory.toml 中 owner = "ours" 的 unit 允许 start / stop / restart。
@@ -20,7 +20,7 @@ from aiohttp import web
 ROOT = Path(__file__).resolve().parent.parent
 INVENTORY = ROOT / "inventory.toml"
 STATIC = Path(__file__).resolve().parent / "static"
-PORT = int(os.environ.get("OPS_PORT", "80"))
+PORT = int(os.environ.get("OPS_PORT", "5000"))
 
 ACTIONS = {"start", "stop", "restart"}
 
