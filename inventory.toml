@@ -99,10 +99,10 @@ status_path = "/queue/status"
 [[service]]
 port = 5000
 unit = "log-viewer.service"
-owner = "unknown"
-title = "旧日志查看页（Flask，tail /var/log/manager_stdout.log）"
+owner = "ours"
+title = "（已停用）旧日志查看页 · 端口预留给新版可视化运维界面"
 script = "~/daemon-page/log-check.py"
-note = "看的是旧 manager-server 的日志，该服务已停用"
+note = "2026-11-04 停用并 disable；unit 备份 ~/swarm-bak/systemd/20261104-202648/，旧日志归档 /mnt/udisk/archive/manager-server-logs-2025/。5000 预留给下一版运维界面"
 
 [[service]]
 port = 8100
