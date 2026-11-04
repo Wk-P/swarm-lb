@@ -1,6 +1,6 @@
 """swarm-lb 运维管理界面（Manager-Node :5000）
 
-只读：节点、swarm 服务、manager 上所有登记的 systemd 服务、主机资源。
+只读：节点、swarm 服务、manager 上所有登记的 systemd 服务、各节点 agent 指标（含 30 分钟内存历史）。
 可写：仅 inventory.toml 中 owner = "ours" 的 unit 允许 start / stop / restart。
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ import shutil
 import socket
 import time
 import tomllib
+from collections import deque
 from pathlib import Path
 
 import aiohttp
@@ -23,6 +24,9 @@ STATIC = Path(__file__).resolve().parent / "static"
 PORT = int(os.environ.get("OPS_PORT", "5000"))
 
 ACTIONS = {"start", "stop", "restart"}
+POLL_S = 3                       # 轮询各节点 agent 的间隔
+HISTORY_N = 600                  # 每节点保留的点数：600 × 3s = 30 分钟
+SERIES = ("cpu", "mem", "temp", "rx", "tx", "dr", "dw")
 
 
 def load_inventory() -> dict:
@@ -163,6 +167,58 @@ def docker_state() -> dict:
         cli.close()
 
 
+# ---------------------------------------------------------------- node agents
+
+def point(m: dict) -> dict:
+    mem = m.get("mem") or {}
+    total, avail = mem.get("total"), mem.get("avail")
+    return {
+        "t": round(m.get("ts", time.time())),
+        "cpu": m.get("cpu_pct"),
+        "mem": round(100 * (total - avail) / total, 1) if total and avail is not None else None,
+        "temp": m.get("temp_c"),
+        "rx": (m.get("net") or {}).get("rx_bps"),
+        "tx": (m.get("net") or {}).get("tx_bps"),
+        "dr": (m.get("io") or {}).get("read_bps"),
+        "dw": (m.get("io") or {}).get("write_bps"),
+    }
+
+
+async def poll_agents(app: web.Application):
+    session: aiohttp.ClientSession = app["session"]
+    while True:
+        try:
+            inv = load_inventory()
+            port = inv.get("cluster", {}).get("agent_port", 9100)
+
+            async def one(n):
+                url = f"http://{n['ip']}:{port}/metrics.json"
+                try:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=2)) as r:
+                        m = await r.json(content_type=None)
+                    return n["name"], {**m, "online": True, "seen": time.time()}
+                except Exception as e:  # noqa: BLE001
+                    prev = app["metrics"].get(n["name"], {})
+                    return n["name"], {"online": False, "error": type(e).__name__,
+                                       "seen": prev.get("seen")}
+
+            for name, m in await asyncio.gather(*[one(n) for n in inv.get("node", [])]):
+                app["metrics"][name] = m
+                if m.get("online") and m.get("ready"):
+                    app["history"].setdefault(name, deque(maxlen=HISTORY_N)).append(point(m))
+        except Exception:  # noqa: BLE001  轮询永不退出
+            pass
+        await asyncio.sleep(POLL_S)
+
+
+async def api_history(request: web.Request) -> web.Response:
+    out = {}
+    for name, dq in request.app["history"].items():
+        pts = list(dq)
+        out[name] = {k: [p[k] for p in pts] for k in ("t", *SERIES)}
+    return web.json_response({"interval": POLL_S, "nodes": out})
+
+
 async def tcp_ok(host: str, port: int) -> bool:
     try:
         _, w = await asyncio.wait_for(asyncio.open_connection(host, port), 1.5)
@@ -208,6 +264,7 @@ async def api_overview(request: web.Request) -> web.Response:
         "inventory_nodes": inv.get("node", []),
         "worker_app_8080": {n["name"]: ok for n, ok in zip(workers, app_ok)},
         "host": host_stats(),
+        "metrics": request.app["metrics"],
         "services": out_svcs,
         "docker": dstate,
     })
@@ -253,9 +310,13 @@ async def index(_: web.Request) -> web.FileResponse:
 
 async def on_startup(app: web.Application):
     app["session"] = aiohttp.ClientSession()
+    app["metrics"] = {}
+    app["history"] = {}
+    app["poller"] = asyncio.create_task(poll_agents(app))
 
 
 async def on_cleanup(app: web.Application):
+    app["poller"].cancel()
     await app["session"].close()
 
 
@@ -263,6 +324,7 @@ def make_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/", index)
     app.router.add_get("/api/overview", api_overview)
+    app.router.add_get("/api/history", api_history)
     app.router.add_post("/api/unit/{unit}/{action}", api_action)
     app.router.add_get("/api/unit/{unit}/logs", api_logs)
     app.on_startup.append(on_startup)
