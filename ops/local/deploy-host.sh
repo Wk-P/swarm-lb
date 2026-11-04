@@ -74,7 +74,7 @@ if [ -f .deployed-files ]; then
     [ -f "\$f" ] && { rm -f -- "\$f"; n=\$((n+1)); }
   done < <(comm -23 <(sort .deployed-files) <(sort .deployed-files.new))
   echo "  删除 \$n 个旧文件"
-  find . -path ./.venv -prune -o -type d -empty -print -delete | sed 's/^/  删除空目录 /'
+  find . -mindepth 1 -type d -empty -not -path './.venv/*' -not -path './.git/*' -print -delete | sed 's/^/  删除空目录 /'
 else
   echo "  首次记录文件清单，不删除任何文件"
 fi
