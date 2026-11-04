@@ -12,3 +12,12 @@ venv/
 *.log
 data/*
 !data/README.md
+
+# 本机部署参数（含 IP / 密码），模板是 .env.example
+.env
+
+# 只留在本机：旧代码（含明文配置）、集群状态快照（节点 ID / IP）
+legacy/
+deploy/swarm-bak/
+deploy/services.txt
+deploy/node-labels.txt

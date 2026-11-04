@@ -377,6 +377,19 @@ class XGBoostDataCollector:
             self.session = None
 
 
+def _manager_ip() -> str:
+    """manager IP 来自环境变量或仓库根目录 .env（不进 git，模板见 .env.example）。"""
+    import os
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if "MANAGER_IP" not in os.environ and env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("MANAGER_IP="):
+                os.environ["MANAGER_IP"] = line.split("=", 1)[1].strip().strip("'\"")
+    if "MANAGER_IP" not in os.environ:
+        raise SystemExit("未设置 MANAGER_IP：在仓库根目录 cp .env.example .env 并填写")
+    return os.environ["MANAGER_IP"]
+
+
 async def main_async(num_waves: int, tasks_min: int = 3, tasks_max: int = 10):
     """Main async function - example usage
     
@@ -387,7 +400,7 @@ async def main_async(num_waves: int, tasks_min: int = 3, tasks_max: int = 10):
     """
     
     # Create client instance
-    client = XGBoostDataCollector(manager_url="http://x.x.x.x:8081")
+    client = XGBoostDataCollector(manager_url=f"http://{_manager_ip()}:8081")
     
     try:
         # Check queue status

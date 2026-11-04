@@ -1,4 +1,4 @@
-"""swarm-lb 运维管理界面（Manager-Node :5000）
+"""swarm-lb 运维管理界面（manager :5000）
 
 只读：节点、swarm 服务、manager 上所有登记的 systemd 服务、各节点 agent 指标（含 30 分钟内存历史）。
 可写：仅 inventory.toml 中 owner = "ours" 的 unit 允许 start / stop / restart。
@@ -21,7 +21,6 @@ from aiohttp import web
 ROOT = Path(__file__).resolve().parent.parent
 INVENTORY = ROOT / "inventory.toml"
 STATIC = Path(__file__).resolve().parent / "static"
-PORT = int(os.environ.get("OPS_PORT", "5000"))
 
 ACTIONS = {"start", "stop", "restart"}
 POLL_S = 3                       # 轮询各节点 agent 的间隔
@@ -29,9 +28,31 @@ HISTORY_N = 600                  # 每节点保留的点数：600 × 3s = 30 分
 SERIES = ("cpu", "mem", "temp", "rx", "tx", "dr", "dw")
 
 
+def load_dotenv(path: Path = ROOT / ".env") -> None:
+    """把仓库根目录 .env 读进 os.environ（不覆盖已有变量）。systemd 已通过 EnvironmentFile 注入时等于空操作。"""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
+
+def _expand(obj):
+    if isinstance(obj, str):
+        return os.path.expandvars(obj)
+    if isinstance(obj, list):
+        return [_expand(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _expand(v) for k, v in obj.items()}
+    return obj
+
+
 def load_inventory() -> dict:
+    """inventory.toml 中的 ${VAR} 用 .env / 环境变量展开（IP、ssh 别名等不进 git）。"""
     with open(INVENTORY, "rb") as f:
-        return tomllib.load(f)
+        return _expand(tomllib.load(f))
 
 
 async def run(*cmd: str, timeout: float = 15) -> tuple[int, str]:
@@ -333,4 +354,5 @@ def make_app() -> web.Application:
 
 
 if __name__ == "__main__":
-    web.run_app(make_app(), host="0.0.0.0", port=PORT)
+    load_dotenv()
+    web.run_app(make_app(), host="0.0.0.0", port=int(os.environ.get("OPS_PORT", "5000")))

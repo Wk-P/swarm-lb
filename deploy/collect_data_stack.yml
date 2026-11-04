@@ -2,7 +2,7 @@
 version: "3.8"
 
 x-app: &app
-  image: soar009/collect_data_app:v8@sha256:7eca5baf0f1c054ba365498d81fb1ab5d94bf09feab103cc76d6611ddcaa2477
+  image: ${DOCKER_IMAGE}@sha256:7eca5baf0f1c054ba365498d81fb1ab5d94bf09feab103cc76d6611ddcaa2477
   volumes:
     - type: bind
       source: /mnt/storage/collect_app_v8

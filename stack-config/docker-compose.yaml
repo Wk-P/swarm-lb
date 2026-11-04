@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   app_w1:
-    image: soar009/collect_data_app:v8
+    image: ${DOCKER_IMAGE}
     deploy:
       replicas: 1
       placement:
@@ -23,7 +23,7 @@ services:
     volumes:
       - /mnt/storage/collect_app_v8:/app/data
   app_w2:
-    image: soar009/collect_data_app:v8
+    image: ${DOCKER_IMAGE}
     deploy:
       replicas: 1
       placement:
@@ -44,7 +44,7 @@ services:
     volumes:
       - /mnt/storage/collect_app_v8:/app/data   
   app_w3:
-    image: soar009/collect_data_app:v8
+    image: ${DOCKER_IMAGE}
     deploy:
       replicas: 1
       placement:

@@ -1,29 +1,39 @@
 #!/usr/bin/env bash
-# 把本仓库部署到 Manager-Node:~/swarm-lb，并安装/更新soar009 systemd unit。
+# 把本仓库部署到 manager 的 $REMOTE_DIR，并安装/更新我们的 systemd unit。
+# 参数全部来自仓库根目录的 .env（本机私有，模板见 .env.example）。
 # 在 Windows Git Bash 的仓库根目录执行：
 #
-#   deploy/deploy-manager.sh             # 同步代码 + uv sync + 安装 unit（不重启运行中的采集器）
-#   deploy/deploy-manager.sh --restart   # 另外重启当前 active 的soar009服务
+#   deploy/deploy-manager.sh             # 同步代码 + .env + uv sync + 安装 unit（不重启运行中的采集器）
+#   deploy/deploy-manager.sh --restart   # 另外重启当前 active 的我们的服务
 #
 # 安全约束：
 #   - 只安装 deploy/systemd/ 里、且在 inventory.toml 登记为 owner="ours" + managed=true 的 unit
+#   - unit 文件是模板（@VAR@），在本机用 .env 渲染后再上传
 #   - 被替换的旧 unit 先备份到 ~/swarm-bak/systemd/<时间戳>/
 #   - 不碰 ~/appv8、~/apps 及其 venv（8081 他人服务、8083 仍在用）
 #   - 不会 enable collect_8080（开机不自启，需要时在运维界面手动启动）
 set -euo pipefail
+source "$(dirname "$0")/lib.sh"
+require MANAGER_SSH MANAGER_IP REMOTE_DIR REMOTE_USER OPS_PORT
 
-HOST=${HOST:-Manager-Node}
-DEST=/home/pi/swarm-lb
+HOST=$MANAGER_SSH
+DEST=$REMOTE_DIR
 RESTART=0
 [[ "${1:-}" == "--restart" ]] && RESTART=1
 
-cd "$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
 
-echo ">>> [1/4] 同步代码到 $HOST:$DEST  ($(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . || echo '+dirty'))"
+echo ">>> [1/4] 同步代码 + .env 到 $HOST:$DEST  ($(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . || echo '+dirty'))"
 git ls-files -co --exclude-standard -z \
   | grep -zvE '^(legacy|data|client-windows)/' \
   | tar --null -T - -cf - \
   | ssh "$HOST" "mkdir -p $DEST && tar -xf - -C $DEST && echo '$(git rev-parse HEAD)' > $DEST/.deployed-rev"
+ssh "$HOST" "umask 077 && cat > $DEST/.env" < "$ENV_FILE"
+
+# 本机渲染 unit 模板，上传到 $DEST/.rendered/systemd/
+RENDER_DIR=$(mktemp -d); trap 'rm -rf "$RENDER_DIR"' EXIT
+for f in deploy/systemd/*.service; do render "$f" > "$RENDER_DIR/$(basename "$f")"; done
+tar -C "$RENDER_DIR" -cf - . | ssh "$HOST" "rm -rf $DEST/.rendered/systemd && mkdir -p $DEST/.rendered/systemd && tar -xf - -C $DEST/.rendered/systemd"
 
 echo ">>> [2/4] uv sync"
 ssh "$HOST" "cd $DEST && ~/.local/bin/uv sync --frozen 2>&1 | tail -5"
@@ -40,7 +50,7 @@ PY
 )
 TS=\$(date +%Y%m%d-%H%M%S)
 CHANGED=0
-for f in deploy/systemd/*.service; do
+for f in .rendered/systemd/*.service; do
   u=\$(basename "\$f")
   case " \$ALLOWED " in *" \$u "*) ;; *) echo "  跳过 \$u（inventory 未登记为 ours+managed）"; continue;; esac
   dst=/etc/systemd/system/\$u
@@ -54,12 +64,12 @@ sudo -n systemctl start swarm-lb-ops.service
 EOF
 
 if [[ $RESTART == 1 ]]; then
-  echo ">>> [4/4] 重启 active 的soar009服务"
+  echo ">>> [4/4] 重启 active 的我们的服务"
   ssh "$HOST" 'for u in collect_8080.service collect_8082_rr.service collect_8084.service swarm-lb-ops.service; do
     if systemctl is-active --quiet $u; then sudo -n systemctl restart $u && echo "  重启 $u"; fi; done'
 else
   echo ">>> [4/4] 未重启运行中的服务（加 --restart 生效新代码）"
 fi
 
-ssh "$HOST" 'systemctl --no-pager --plain list-units "collect_*" swarm-lb-ops.service log-viewer.service | head -n -5'
-echo ">>> 运维界面: http://x.x.x.x:5000/"
+ssh "$HOST" 'systemctl --no-pager --plain list-units "collect_*" swarm-lb-ops.service | head -n -5'
+echo ">>> 运维界面: http://$MANAGER_IP:$OPS_PORT/"

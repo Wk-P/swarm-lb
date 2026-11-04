@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 在 Manager-Node 上：测速 sdb(UDisk) vs sda(系统盘)，sdb 更快则格式化为 ext4 挂到 /mnt/udisk，
+# 在 manager 上：测速 sdb(UDisk) vs sda(系统盘)，sdb 更快则格式化为 ext4 挂到 /mnt/udisk，
 # 否则恢复 swap 原样。会清空 /dev/sdb（已只读扫描确认无用户数据，仅 swap 残片）。
 #
 # 从 Windows Git Bash 仓库根目录执行：
-#   ssh Manager-Node 'sudo bash -s' < deploy/setup-udisk.sh
+#   ssh "$MANAGER_SSH" 'sudo bash -s' < deploy/setup-udisk.sh
 set -euo pipefail
 DEV=/dev/sdb
 MNT=/mnt/udisk

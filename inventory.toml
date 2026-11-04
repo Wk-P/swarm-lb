@@ -1,5 +1,6 @@
 # swarm-lb 资源登记表 —— "什么跑在哪、端口归谁" 的唯一来源
 # 运维界面 (ops/) 和部署脚本 (deploy/deploy-manager.sh) 都读这个文件。
+# ${VAR} 是 .env 里的值（本机私有，模板见 .env.example），运维界面加载时展开。
 #
 # owner:
 #   ours    soar009。运维界面可启停/重启；deploy 脚本会安装其 unit
@@ -8,39 +9,39 @@
 
 [cluster]
 stack = "collect_data_stack"
-image = "soar009/collect_data_app:v8"
-manager_ip = "x.x.x.x"
+image = "${DOCKER_IMAGE}"
+manager_ip = "${MANAGER_IP}"
 agent_port = 9100         # 每个节点上的监控 agent（agent/node_agent.py，deploy/deploy-agents.sh 部署）
 
 [[node]]
 name = "manager"
-ssh = "Manager-Node"
-ip = "x.x.x.x"
+ssh = "${MANAGER_SSH}"
+ip = "${MANAGER_IP}"
 role = "manager"
 label = ""
 
 [[node]]
 name = "worker-01"
-ssh = "Worker-Node-1"
-ip = "x.x.x.x"
+ssh = "${WORKER1_SSH}"
+ip = "${WORKER1_IP}"
 role = "worker"
 label = "low"
 
 [[node]]
 name = "worker-02"
-ssh = "Worker-Node-2"
-ip = "x.x.x.x"
+ssh = "${WORKER2_SSH}"
+ip = "${WORKER2_IP}"
 role = "worker"
 label = "middle"
 
 [[node]]
 name = "worker-03"
-ssh = "Worker-Node-3"
-ip = "x.x.x.x"
+ssh = "${WORKER3_SSH}"
+ip = "${WORKER3_IP}"
 role = "worker"
 label = "high"
 
-# ---------------- Manager-Node 上的 systemd 服务（按端口） ----------------
+# ---------------- manager 上的 systemd 服务（按端口） ----------------
 
 [[service]]
 port = 5000

@@ -1,4 +1,5 @@
 # 由 swarm-lb 仓库管理：deploy/systemd/swarm-lb-ops.service  (deploy/deploy-manager.sh 安装)
+# 模板：@变量名@ 占位符由 deploy/lib.sh 的 render 用 .env 的值替换
 [Unit]
 Description=swarm-lb ops UI (:5000) [ours]
 After=network-online.target docker.service
@@ -6,12 +7,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/swarm-lb/ops/
+User=@REMOTE_USER@
+Group=@REMOTE_USER@
+WorkingDirectory=@REMOTE_DIR@/ops/
+EnvironmentFile=-@REMOTE_DIR@/.env
 Environment=PYTHONUNBUFFERED=1
-Environment=OPS_PORT=5000
-ExecStart=/home/pi/swarm-lb/.venv/bin/python /home/pi/swarm-lb/ops/server.py
+Environment=OPS_PORT=@OPS_PORT@
+ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/ops/server.py
 Restart=always
 RestartSec=3
 

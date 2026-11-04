@@ -3,6 +3,7 @@ import docker       # type: ignore
 from docker.models.services import Service      # type: ignore
 from docker.models.nodes import Node      # type: ignore
 import paramiko             # type: ignore
+from settings import NODE_SSH_USER, NODE_SSH_PASSWORD   # 本机私有账号（.env）
 
 
 def get_docker_node_list():
@@ -109,7 +110,7 @@ def get_resources_limit(service_name: str) -> dict:
                 node: Node = docker_client.nodes.get(task_node_id)
                 node_status: dict = node.attrs.get("Status", {})
                 addr = node_status.get("Addr", "")
-                hdd_limit = get_hdd_limit(service.name, addr, 22, "pi", "***REMOVED***")          # real ssh credentials in private deployment
+                hdd_limit = get_hdd_limit(service.name, addr, 22, NODE_SSH_USER, NODE_SSH_PASSWORD)          # 账号来自 .env
                 limit = {
                     'node_id': task_node_id,
                     'node_hostname': node.attrs.get("Description", {}).get("Hostname", ""),

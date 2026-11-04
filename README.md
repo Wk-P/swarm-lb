@@ -7,12 +7,14 @@
 
 | 节点 | IP | label |
 |---|---|---|
-| manager | x.x.x.x | — |
-| worker-01 | x.x.x.x | type=low |
-| worker-02 | x.x.x.x | type=middle |
-| worker-03 | x.x.x.x | type=high |
+| manager | `$MANAGER_IP` | — |
+| worker-01 | `$WORKER1_IP` | type=low |
+| worker-02 | `$WORKER2_IP` | type=middle |
+| worker-03 | `$WORKER3_IP` | type=high |
 
-当前线上：stack `collect_data_stack`，3 个服务 `app_w1/w2/w3`，镜像 `soar009/collect_data_app:v8`。
+IP、ssh 别名、账号密码等只保存在本机 `.env`（不进 git）。首次使用：`cp .env.example .env` 后填入真实值，所有部署脚本都从它读取，缺失时直接报错退出。
+
+当前线上：stack `collect_data_stack`，3 个服务 `app_w1/w2/w3`，镜像 `$DOCKER_IMAGE`。
 
 ## 目录
 
@@ -24,16 +26,14 @@
 | `stack-config/` | v8 stack compose | `~/appv8/stack-config` |
 | `script/` | v8 构建/启停脚本 | `~/appv8/script` |
 | `hdd_config.json` | | `~/appv8` |
-| `deploy/` | **当前线上在用**的 `collect_data_stack.yml`、`rebuild-swarm.sh`、`swarm-bak/`（2026-11-04 swarm 状态备份）、services/node-labels 快照 | Manager-Node `~/` 和 `~/apps/docker/configures` |
-| `legacy/v5-v7/` | 旧版本 manager_server、v5/v6/v7 app、scripts | Manager-Node `~/apps`（git `zhoyang1106/apps`，含未提交改动，见 `GIT_STATE.txt`） |
-| `legacy/cluster_projects/` | v6 app、server_8100、clients；`clients/collect_data/` 是 v8 的早期快照 | `D:\github\cluster_projects`（collect_data 为 git `Wk-P/ExampleCode-trainXGBoost`，只复制了代码，见其 `GIT_STATE.txt`） |
-| `legacy/server_codes/` | 最早的 manager_node / worker_node | `D:\github\server_codes` |
-| `legacy/daemon-page/` | 日志查看小页面 | Manager-Node `~/daemon-page` |
+| `deploy/` | 部署脚本（读本机 `.env`）、systemd unit 模板、`collect_data_stack.yml`、`rebuild-swarm.sh` | manager `~/` 和 `~/apps/docker/configures` |
+| `legacy/`（仅本机，不进 git） | 旧版本代码与数据（v5-v7、cluster_projects、server_codes、daemon-page），含旧明文配置 | 见本机 `legacy/` 内各 `GIT_STATE.txt` |
 | `data/` | 实验日志（不进 git） | |
 
 ## 注意
 
-- **2026-11-04 网段从 `x.x.x.x` 改为 `x.x.x.x`**（manager .100，worker .150/.151/.152 不变）。主线代码已改成新 IP；`legacy/` 保留原样，里面仍是旧的 `x.x.x.x`。
+- **2026-11-04 网段变更**，主线代码已不再写死 IP（统一读 `.env`）；`legacy/` 只留在本机，不进 git。
+- 集群状态快照（`deploy/swarm-bak/`、`services.txt`、`node-labels.txt`）只留在本机，不进 git；manager 上的备份在 `~/swarm-bak`。
 
 - 线上 stack yml 原本放在旧仓库 `~/apps/docker/configures/`，`rebuild-swarm.sh` 也是从那里部署。以本仓库 `deploy/` 为准时，记得同步回节点或修改脚本路径。
 - 没有复制的：各处 `.venv`（manager_server 的 1.2G 等）、`__pycache__`、collect_data 的约 5GB 训练数据。

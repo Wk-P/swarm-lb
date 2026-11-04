@@ -1,4 +1,5 @@
 # 由 swarm-lb 仓库管理：deploy/systemd/collect_8084.service  (deploy/deploy-manager.sh 安装)
+# 模板：@变量名@ 占位符由 deploy/lib.sh 的 render 用 .env 的值替换
 [Unit]
 Description=swarm-lb 8084 XGB collector handle_hdd_v2 rr [ours]
 After=network.target
@@ -6,13 +7,14 @@ After=network.target
 [Service]
 Type=simple
 
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/swarm-lb/manager/
+User=@REMOTE_USER@
+Group=@REMOTE_USER@
+WorkingDirectory=@REMOTE_DIR@/manager/
 
+EnvironmentFile=-@REMOTE_DIR@/.env
 Environment=PYTHONUNBUFFERED=1
 
-ExecStart=/home/pi/swarm-lb/.venv/bin/python /home/pi/swarm-lb/manager/manager_xgbdata_collector_handle_hdd_v2.py
+ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/manager/manager_xgbdata_collector_handle_hdd_v2.py
 
 Restart=no
 

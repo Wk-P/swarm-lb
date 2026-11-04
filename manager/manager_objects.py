@@ -6,6 +6,7 @@ import paramiko             # type: ignore
 from aiohttp import ClientTimeout
 import aiohttp
 import docker               # type: ignore
+from settings import NODE_SSH_USER, NODE_SSH_PASSWORD
 from docker_utils.utils import get_stack_services, get_stack_services_resources_limits, get_docker_node_list, get_service_port_list
 from pathlib import Path
 
@@ -310,8 +311,8 @@ class ServerManager:
                     ssh_client=paramiko.SSHClient(),
                     hostname=hostname,
                     port=22,
-                    username="pi",
-                    password="***REMOVED***",
+                    username=NODE_SSH_USER,
+                    password=NODE_SSH_PASSWORD,
                     service_name=w.get('service_name')
                 )
                 # Only add if connection succeeded
@@ -469,8 +470,8 @@ class ServerManager:
                         ssh_client=paramiko.SSHClient(),
                         hostname=hostname,
                         port=22,
-                        username="pi",
-                        password="***REMOVED***",
+                        username=NODE_SSH_USER,
+                        password=NODE_SSH_PASSWORD,
                         service_name=worker.get('service_name')
                     )
                     # Only add if connection succeeded

@@ -269,9 +269,22 @@ async def cpu_tasks(client: DataClient, data_list: list[Dict[str, Any]], tasks: 
 
 
 
+def _manager_ip() -> str:
+    """manager IP 来自环境变量或仓库根目录 .env（不进 git，模板见 .env.example）。"""
+    import os
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if "MANAGER_IP" not in os.environ and env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("MANAGER_IP="):
+                os.environ["MANAGER_IP"] = line.split("=", 1)[1].strip().strip("'\"")
+    if "MANAGER_IP" not in os.environ:
+        raise SystemExit("未设置 MANAGER_IP：在仓库根目录 cp .env.example .env 并填写")
+    return os.environ["MANAGER_IP"]
+
+
 async def main():
     # create client instance
-    url = "http://x.x.x.x:8080/"
+    url = f"http://{_manager_ip()}:8080/"
     client = DataClient(url)
     folder = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 

@@ -1,4 +1,6 @@
 #!/bin/bash
-stack_name=collect_data_stack
-sudo docker stack rm $stack_name
-echo "Stack $stack_name stopped."
+set -e
+source "$(dirname "$0")/../deploy/lib.sh"
+require STACK_NAME
+sudo docker stack rm "$STACK_NAME"
+echo "Stack $STACK_NAME stopped."
