@@ -18,7 +18,7 @@
 ## 整体结构
 
 ```
-开发机 / 他人机器                         集群（本地 192.x 网段，模拟远程环境）
+开发机 / user01机器                         集群（本地 192.x 网段，模拟远程环境）
 ┌───────────────────────┐     ssh     ┌──────────────────────────────────────────────┐
 │ ops/local/  部署、运维 │ ──────────▶ │ manager（宿主机，systemd）                   │
 │ clients/    发请求     │ ── HTTP ──▶ │   host/manager/     调度器、采集器 :8080-8084 │
@@ -31,12 +31,12 @@
                                        └──────────────────────────────────────────────┘
 ```
 
-| 节点 | IP | swarm label |
-|---|---|---|
-| manager | `$MANAGER_IP` | — |
-| worker-01 | `$WORKER1_IP` | type=low |
+| 节点      | IP            | swarm label |
+| --------- | ------------- | ----------- |
+| manager   | `$MANAGER_IP` | —           |
+| worker-01 | `$WORKER1_IP` | type=low    |
 | worker-02 | `$WORKER2_IP` | type=middle |
-| worker-03 | `$WORKER3_IP` | type=high |
+| worker-03 | `$WORKER3_IP` | type=high   |
 
 真实 IP 只记在 `envs/<环境名>.env` 里，见[环境参数](#环境参数)。线上的 stack 叫 `collect_data_stack`，包含 3 个服务 `app_w1/w2/w3`，镜像是 `$DOCKER_IMAGE`。
 
@@ -44,22 +44,22 @@
 
 目录按"代码在哪台机器上运行"划分：
 
-| 路径 | 在哪运行 | 内容 |
-|---|---|---|
-| `host/manager/` | manager 宿主机（systemd） | 调度算法 `LB_algorithm/`、调度器和采集器 `manager_*.py`、模型 `model/`、私有参数读取 `settings.py` |
-| `image/worker-app/` | worker 上的 docker 容器 | worker 服务 `app.py`、`Dockerfile`，有独立的 `pyproject.toml` 和 `uv.lock` |
-| `image/stack/` | swarm | stack 定义：`docker-compose.yaml`、`collect_data_stack.yml` |
-| `clients/load-client/` | 集群外（开发机或他人机器） | 发请求的客户端 |
-| `ops/cluster/ui/` | manager :5000 | 运维管理界面（aiohttp 后端加单页前端） |
-| `ops/cluster/agent/` | 每个节点 :9100 | 节点监控 agent，只用标准库，只读 |
-| `ops/cluster/systemd/` | manager 和各节点 | systemd unit 模板，`@变量名@` 在部署时用环境参数替换 |
-| `ops/cluster/bin/` | manager | 集群内运维脚本：重建 swarm、启停 stack、构建镜像、查询队列等 |
-| `ops/local/` | 开发机 | 部署脚本和远程执行入口；`snapshots/` 是集群状态快照（不进 git） |
-| `ops/lib.sh` | 开发机和 manager 共用 | 加载环境参数、模板渲染 |
-| `envs/` | 开发机 | 各环境参数，只有 `example.env` 进 git |
-| `inventory.toml` | 开发机和 manager 共用 | 节点、服务、端口归属的登记表，运维界面和部署脚本都读它 |
-| `data/` | — | 实验日志和数据（不进 git） |
-| `legacy/` | — | 旧版本代码和数据，含旧的明文配置，只留在本机，不进 git |
+| 路径                   | 在哪运行                     | 内容                                                                                               |
+| ---------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `host/manager/`        | manager 宿主机（systemd）    | 调度算法 `LB_algorithm/`、调度器和采集器 `manager_*.py`、模型 `model/`、私有参数读取 `settings.py` |
+| `image/worker-app/`    | worker 上的 docker 容器      | worker 服务 `app.py`、`Dockerfile`，有独立的 `pyproject.toml` 和 `uv.lock`                         |
+| `image/stack/`         | swarm                        | stack 定义：`docker-compose.yaml`、`collect_data_stack.yml`                                        |
+| `clients/load-client/` | 集群外（开发机或user01机器） | 发请求的客户端                                                                                     |
+| `ops/cluster/ui/`      | manager :5000                | 运维管理界面（aiohttp 后端加单页前端）                                                             |
+| `ops/cluster/agent/`   | 每个节点 :9100               | 节点监控 agent，只用标准库，只读                                                                   |
+| `ops/cluster/systemd/` | manager 和各节点             | systemd unit 模板，`@变量名@` 在部署时用环境参数替换                                               |
+| `ops/cluster/bin/`     | manager                      | 集群内运维脚本：重建 swarm、启停 stack、构建镜像、查询队列等                                       |
+| `ops/local/`           | 开发机                       | 部署脚本和远程执行入口；`snapshots/` 是集群状态快照（不进 git）                                    |
+| `ops/lib.sh`           | 开发机和 manager 共用        | 加载环境参数、模板渲染                                                                             |
+| `envs/`                | 开发机                       | 各环境参数，只有 `example.env` 进 git                                                              |
+| `inventory.toml`       | 开发机和 manager 共用        | 节点、服务、端口归属的登记表，运维界面和部署脚本都读它                                             |
+| `data/`                | —                            | 实验日志和数据（不进 git）                                                                         |
+| `legacy/`              | —                            | 旧版本代码和数据，含旧的明文配置，只留在本机，不进 git                                             |
 
 **规则：除 `ops/local/`、`clients/`、`envs/`、`data/`、`legacy/` 外，其余文件都会被部署到 manager 上。**
 
@@ -99,14 +99,14 @@ IP、ssh 别名、账号密码和路径等，都放在本机的 `envs/<环境名
 - **格式**：每行写 `KEY=VALUE`。**不能在行尾写注释**，systemd 不支持。
 - **修改后**：要重新执行 `deploy-host.sh` 才会生效；正在运行的服务还要加 `--restart`。改了共享的参数（比如 SSH 密码）时，要通知其他会部署的人同步修改自己的 env 文件。
 
-| 变量 | 用途 |
-|---|---|
-| `MANAGER_SSH` `MANAGER_IP`、`WORKER{1,2,3}_SSH` `WORKER{1,2,3}_IP` | 各节点的 ssh 别名和 IP |
-| `REMOTE_USER` `REMOTE_DIR` `AGENT_DIR` | 节点上的账号、本仓库在 manager 上的部署目录、agent 目录 |
-| `NODE_SSH_USER` `NODE_SSH_PASSWORD` | 采集器 SSH 到 worker 读取资源时用的账号 |
-| `DOCKER_IMAGE` `STACK_NAME` `STACK_COMPOSE` `REBUILD_COMPOSE` `DOCKER_BUILD_DIR` | 镜像和 stack 相关 |
-| `GRB_LICENSE_FILE` | 8080 用的 gurobi license |
-| `OPS_PORT` `AGENT_PORT` | 运维界面和 agent 的端口 |
+| 变量                                                                             | 用途                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `MANAGER_SSH` `MANAGER_IP`、`WORKER{1,2,3}_SSH` `WORKER{1,2,3}_IP`               | 各节点的 ssh 别名和 IP                                  |
+| `REMOTE_USER` `REMOTE_DIR` `AGENT_DIR`                                           | 节点上的账号、本仓库在 manager 上的部署目录、agent 目录 |
+| `NODE_SSH_USER` `NODE_SSH_PASSWORD`                                              | 采集器 SSH 到 worker 读取资源时用的账号                 |
+| `DOCKER_IMAGE` `STACK_NAME` `STACK_COMPOSE` `REBUILD_COMPOSE` `DOCKER_BUILD_DIR` | 镜像和 stack 相关                                       |
+| `GRB_LICENSE_FILE`                                                               | 8080 用的 gurobi license                                |
+| `OPS_PORT` `AGENT_PORT`                                                          | 运维界面和 agent 的端口                                 |
 
 ## 修改代码的流程
 
@@ -132,18 +132,18 @@ ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括
 
 ## 各部分怎么部署
 
-| 改了什么 | 怎么部署 | 说明 |
-|---|---|---|
-| 运维界面 `ops/cluster/ui/`（前端或后端） | `ops/local/deploy-host.sh lab` | 每次部署都会自动重启运维界面，刷新浏览器即可 |
-| 调度器和采集器 `host/manager/` | `ops/local/deploy-host.sh lab --restart` | 会重启正在运行的采集器。没在运行的，下次在运维界面启动时就是新代码 |
-| systemd unit `ops/cluster/systemd/` | `ops/local/deploy-host.sh lab`，正在运行的服务还要加 `--restart` | 脚本会提示哪些服务需要重启；被替换的旧 unit 会备份到 manager 的 `~/swarm-bak/systemd/<时间戳>/` |
-| `inventory.toml` | `ops/local/deploy-host.sh lab` | 运维界面每次请求都会重新读取 |
-| Python 依赖 `pyproject.toml` | 先执行 `uv lock`，把 `uv.lock` 一起提交，再 `deploy-host.sh lab --restart` | manager 上的 `uv sync` 用的是 `--frozen`，锁文件没提交会报错 |
-| 节点 agent `ops/cluster/agent/` | `ops/local/deploy-agents.sh lab` | 部署到所有节点；只部署某几个节点：`deploy-agents.sh lab Worker-Node-1 Worker-Node-2` |
-| 集群内脚本 `ops/cluster/bin/` | 先 `deploy-host.sh lab`，再执行 `ops/local/remote.sh lab <脚本名>` | 见下方[集群内运维](#集群内运维) |
-| worker 镜像 `image/worker-app/` | 先 `deploy-host.sh lab`，再 `remote.sh lab build-image.sh`，最后 `remote.sh lab stack-start.sh` | ⚠️ 见[待办与注意](#待办与注意)：这两个脚本目前仍指向 `~/appv8` |
-| 客户端 `clients/` | 不用部署 | 在本机运行：`SWARM_ENV=lab uv run python clients/load-client/client.py` |
-| 环境参数 `envs/lab.env` | `deploy-host.sh lab`，正在运行的服务还要加 `--restart` | 这个文件不进 git |
+| 改了什么                                 | 怎么部署                                                                                        | 说明                                                                                            |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 运维界面 `ops/cluster/ui/`（前端或后端） | `ops/local/deploy-host.sh lab`                                                                  | 每次部署都会自动重启运维界面，刷新浏览器即可                                                    |
+| 调度器和采集器 `host/manager/`           | `ops/local/deploy-host.sh lab --restart`                                                        | 会重启正在运行的采集器。没在运行的，下次在运维界面启动时就是新代码                              |
+| systemd unit `ops/cluster/systemd/`      | `ops/local/deploy-host.sh lab`，正在运行的服务还要加 `--restart`                                | 脚本会提示哪些服务需要重启；被替换的旧 unit 会备份到 manager 的 `~/swarm-bak/systemd/<时间戳>/` |
+| `inventory.toml`                         | `ops/local/deploy-host.sh lab`                                                                  | 运维界面每次请求都会重新读取                                                                    |
+| Python 依赖 `pyproject.toml`             | 先执行 `uv lock`，把 `uv.lock` 一起提交，再 `deploy-host.sh lab --restart`                      | manager 上的 `uv sync` 用的是 `--frozen`，锁文件没提交会报错                                    |
+| 节点 agent `ops/cluster/agent/`          | `ops/local/deploy-agents.sh lab`                                                                | 部署到所有节点；只部署某几个节点：`deploy-agents.sh lab Worker-Node-1 Worker-Node-2`            |
+| 集群内脚本 `ops/cluster/bin/`            | 先 `deploy-host.sh lab`，再执行 `ops/local/remote.sh lab <脚本名>`                              | 见下方[集群内运维](#集群内运维)                                                                 |
+| worker 镜像 `image/worker-app/`          | 先 `deploy-host.sh lab`，再 `remote.sh lab build-image.sh`，最后 `remote.sh lab stack-start.sh` | ⚠️ 见[待办与注意](#待办与注意)：这两个脚本目前仍指向 `~/appv8`                                  |
+| 客户端 `clients/`                        | 不用部署                                                                                        | 在本机运行：`SWARM_ENV=lab uv run python clients/load-client/client.py`                         |
+| 环境参数 `envs/lab.env`                  | `deploy-host.sh lab`，正在运行的服务还要加 `--restart`                                          | 这个文件不进 git                                                                                |
 
 ### `deploy-host.sh` 做了什么
 
@@ -155,6 +155,7 @@ ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括
 6. **记录**：写下 `.deployed-rev`（提交）和 `.deployed-by`（谁、什么时候、从哪台机器）。
 
 脚本**不会**做这些事：
+
 - 不改采集器的开机自启状态。需要时自己在 manager 上执行 `systemctl enable` 或 `disable`。
 - 不碰 `~/appv8`、`~/apps` 和它们的 venv，8081 和 8083 还在用。
 
@@ -199,16 +200,16 @@ ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
 
 完整信息以 [inventory.toml](inventory.toml) 为准。
 
-| 端口 | unit | 归属 | 内容 | 开机自启 |
-|---|---|---|---|---|
-| 5000 | `swarm-lb-ops` | ours | 运维界面 `ops/cluster/ui/server.py` | 是 |
-| 9100 | `swarm-lb-agent` | ours | 节点 agent，每个节点一份 | 是 |
-| 8080 | `collect_8080` | ours | `manager_hmsw.py`（DQN / direct / sd_min / min_min / RR） | 否，需要时手动启动 |
-| 8081 | `collect_8081` | others | `~/appv8/manager/manager_hmsw_v2.py`，他人在用，**不要动** | 否 |
-| 8082 | `collect_8082_rr` | ours | XGB 数据采集 · Round Robin | 是 |
-| 8083 | `collect_8083` | ours | XGB 数据采集 · Least Time，代码在 `~/appv8`，还没迁进本仓库 | 是 |
-| 8084 | `collect_8084` | ours | XGB 数据采集 · handle_hdd v2（RR） | 是 |
-| 8080（worker） | swarm 服务 | ours | worker 容器 `image/worker-app/app.py` | 由 swarm 管理 |
+| 端口           | unit              | 归属   | 内容                                                         | 开机自启           |
+| -------------- | ----------------- | ------ | ------------------------------------------------------------ | ------------------ |
+| 5000           | `swarm-lb-ops`    | ours   | 运维界面 `ops/cluster/ui/server.py`                          | 是                 |
+| 9100           | `swarm-lb-agent`  | ours   | 节点 agent，每个节点一份                                     | 是                 |
+| 8080           | `collect_8080`    | ours   | `manager_hmsw.py`（DQN / direct / sd_min / min_min / RR）    | 否，需要时手动启动 |
+| 8081           | `collect_8081`    | others | `~/appv8/manager/manager_hmsw_v2.py`，user01在用，**不要动** | 否                 |
+| 8082           | `collect_8082_rr` | ours   | XGB 数据采集 · Round Robin                                   | 是                 |
+| 8083           | `collect_8083`    | ours   | XGB 数据采集 · Least Time，代码在 `~/appv8`，还没迁进本仓库  | 是                 |
+| 8084           | `collect_8084`    | ours   | XGB 数据采集 · handle_hdd v2（RR）                           | 是                 |
+| 8080（worker） | swarm 服务        | ours   | worker 容器 `image/worker-app/app.py`                        | 由 swarm 管理      |
 
 有些脚本把端口写死在代码里，不能同时运行：`manager_hmsw8d.py`、`manager_hmsw_collect.py` 和 8080 冲突，`manager_xgbdata_collecter.py` 和 8082 冲突。
 
@@ -216,18 +217,18 @@ ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
 
 根目录只有一份 `uv.lock`，按运行位置分组安装：
 
-| 运行位置 | 安装命令 |
-|---|---|
-| manager | `uv sync --no-default-groups --group host --group algo --group ui`（`deploy-host.sh` 自动执行） |
-| 客户端机器 | `uv sync --no-default-groups --group client` |
-| 开发机 | `uv sync`（装 host、ui、client）；要用算法依赖时执行 `uv sync --all-groups` |
+| 运行位置   | 安装命令                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| manager    | `uv sync --no-default-groups --group host --group algo --group ui`（`deploy-host.sh` 自动执行） |
+| 客户端机器 | `uv sync --no-default-groups --group client`                                                    |
+| 开发机     | `uv sync`（装 host、ui、client）；要用算法依赖时执行 `uv sync --all-groups`                     |
 
-| 分组 | 给谁用 |
-|---|---|
-| `host` | `host/manager/` 的采集器 |
-| `algo` | 8080 的调度算法（torch、gurobi、xgboost 等） |
-| `ui` | 运维界面 |
-| `client` | `clients/` |
+| 分组     | 给谁用                                       |
+| -------- | -------------------------------------------- |
+| `host`   | `host/manager/` 的采集器                     |
+| `algo`   | 8080 的调度算法（torch、gurobi、xgboost 等） |
+| `ui`     | 运维界面                                     |
+| `client` | `clients/`                                   |
 
 docker 镜像在 `image/worker-app/` 下有自己的 `pyproject.toml`。agent 只用标准库，直接用系统的 `python3`。
 
@@ -235,15 +236,15 @@ Python 版本锁定为 3.11，和 manager 系统的 Python 3.11.2 保持一致�
 
 ## 常见问题
 
-| 现象 | 原因和处理 |
-|---|---|
-| `错误：未指定环境` 或 `找不到 envs/xxx.env` | 脚本第一个参数要写环境名，或者先设置 `SWARM_ENV`；env 文件从 `envs/example.env` 复制 |
-| `… 缺少：XXX` | 你的 env 文件比 `example.env` 少了变量，对照模板补上 |
-| `sudo: a password is required` | manager 上的 `pi` 用户要能免密 sudo |
-| 部署后运维界面打不开 | 在 manager 上看日志：`journalctl -u swarm-lb-ops -n 50` |
-| 采集器连不上 worker 的 SSH | 检查 env 里的 `NODE_SSH_USER`、`NODE_SSH_PASSWORD`，改完后重新部署并加 `--restart` |
-| `uv sync --frozen` 报错 | `pyproject.toml` 改了但没执行 `uv lock`，或者 `uv.lock` 没提交 |
-| 客户端提示 `未找到 MANAGER_IP` | 设置 `SWARM_ENV=lab`；在他人机器上，也可以在 `clients/load-client/.env` 里写一行 `MANAGER_IP=...` |
+| 现象                                        | 原因和处理                                                                                          |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `错误：未指定环境` 或 `找不到 envs/xxx.env` | 脚本第一个参数要写环境名，或者先设置 `SWARM_ENV`；env 文件从 `envs/example.env` 复制                |
+| `… 缺少：XXX`                               | 你的 env 文件比 `example.env` 少了变量，对照模板补上                                                |
+| `sudo: a password is required`              | manager 上的 `pi` 用户要能免密 sudo                                                                 |
+| 部署后运维界面打不开                        | 在 manager 上看日志：`journalctl -u swarm-lb-ops -n 50`                                             |
+| 采集器连不上 worker 的 SSH                  | 检查 env 里的 `NODE_SSH_USER`、`NODE_SSH_PASSWORD`，改完后重新部署并加 `--restart`                  |
+| `uv sync --frozen` 报错                     | `pyproject.toml` 改了但没执行 `uv lock`，或者 `uv.lock` 没提交                                      |
+| 客户端提示 `未找到 MANAGER_IP`              | 设置 `SWARM_ENV=lab`；在user01机器上，也可以在 `clients/load-client/.env` 里写一行 `MANAGER_IP=...` |
 
 ## 待办与注意
 

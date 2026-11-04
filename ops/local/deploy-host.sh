@@ -14,7 +14,7 @@
 #   - 只安装 ops/cluster/systemd/ 里、且在 inventory.toml 登记为 owner="ours" + managed=true 的 unit
 #   - 被替换的旧 unit 先备份到 ~/swarm-bak/systemd/<时间戳>/
 #   - 只删除上次由本脚本部署、这次已不存在的文件（按 .deployed-files 清单）；.venv/.env 等不动
-#   - 不碰 ~/appv8、~/apps 及其 venv（8081 他人服务、8083 仍在用）
+#   - 不碰 ~/appv8、~/apps 及其 venv（8081 user01服务、8083 仍在用）
 #   - 不改变采集器的开机自启状态（需要时在 manager 上 systemctl enable/disable）
 set -euo pipefail
 source "$(dirname "$0")/../lib.sh"

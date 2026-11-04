@@ -381,7 +381,7 @@ def _manager_ip() -> str:
     """manager IP，按顺序查找：
     1. 环境变量 MANAGER_IP
     2. 环境变量 SWARM_ENV 指定的 <仓库>/envs/<名>.env（开发机）
-    3. 本目录下的 .env（他人机器只拷了 clients/ 时用，写一行 MANAGER_IP=...）
+    3. 本目录下的 .env（user01机器只拷了 clients/ 时用，写一行 MANAGER_IP=...）
     """
     import os
     if os.environ.get("MANAGER_IP"):

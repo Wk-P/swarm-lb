@@ -76,7 +76,7 @@ unit = "collect_8081.service"
 owner = "others"
 title = "manager_hmsw_v2（RL_MOTS / Ablation / algor_set）"
 script = "~/appv8/manager/manager_hmsw_v2.py"
-note = "他人使用，勿动。仍用 ~/apps/manager_server/.venv + ~/appv8"
+note = "user01使用，勿动。仍用 ~/apps/manager_server/.venv + ~/appv8"
 
 [[service]]
 port = 8082
