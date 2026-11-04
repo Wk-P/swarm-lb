@@ -2,7 +2,7 @@
 # 运维界面 (ops/) 和部署脚本 (deploy/deploy-manager.sh) 都读这个文件。
 #
 # owner:
-#   ours    我们的。运维界面可启停/重启；deploy 脚本会安装其 unit
+#   ours    soar009。运维界面可启停/重启；deploy 脚本会安装其 unit
 #   others  别人的。只读展示，任何脚本都不得修改其 unit / venv / 代码目录
 #   unknown 归属未确认。只读展示
 

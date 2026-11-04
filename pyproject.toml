@@ -6,7 +6,7 @@ readme = "README.md"
 # Manager-Node 系统 Python 是 3.11.2；锁在 3.11 保证 Windows 与 Pi 解析一致
 requires-python = "==3.11.*"
 
-# 默认依赖 = Manager-Node 上我们的常驻服务（8082 / 8084 采集器 + 80 运维界面）
+# 默认依赖 = Manager-Node 上soar009常驻服务（8082 / 8084 采集器 + 80 运维界面）
 # 版本与原 ~/apps/manager_server/.venv 中线上实际运行的一致
 dependencies = [
     "aiohttp==3.11.6",

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 把本仓库部署到 Manager-Node:~/swarm-lb，并安装/更新我们的 systemd unit。
+# 把本仓库部署到 Manager-Node:~/swarm-lb，并安装/更新soar009 systemd unit。
 # 在 Windows Git Bash 的仓库根目录执行：
 #
 #   deploy/deploy-manager.sh             # 同步代码 + uv sync + 安装 unit（不重启运行中的采集器）
-#   deploy/deploy-manager.sh --restart   # 另外重启当前 active 的我们的服务
+#   deploy/deploy-manager.sh --restart   # 另外重启当前 active 的soar009服务
 #
 # 安全约束：
 #   - 只安装 deploy/systemd/ 里、且在 inventory.toml 登记为 owner="ours" + managed=true 的 unit
@@ -54,7 +54,7 @@ sudo -n systemctl start swarm-lb-ops.service
 EOF
 
 if [[ $RESTART == 1 ]]; then
-  echo ">>> [4/4] 重启 active 的我们的服务"
+  echo ">>> [4/4] 重启 active 的soar009服务"
   ssh "$HOST" 'for u in collect_8080.service collect_8082_rr.service collect_8084.service swarm-lb-ops.service; do
     if systemctl is-active --quiet $u; then sudo -n systemctl restart $u && echo "  重启 $u"; fi; done'
 else
