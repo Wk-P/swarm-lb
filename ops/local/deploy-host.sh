@@ -49,8 +49,8 @@ OLD_REV=$(ssh -n "$HOST" "cat $DEST/.deployed-rev 2>/dev/null" || true)
 if [[ -n $OLD_REV ]]; then
   OLD_BY=$(ssh -n "$HOST" "cat $DEST/.deployed-by 2>/dev/null" || true)
   echo "  manager 上当前：${OLD_REV:0:7}  ${OLD_BY}"
-  if ! git cat-file -e "$OLD_REV^{commit}" 2>/dev/null; then
-    fail_or_force "manager 上部署的 ${OLD_REV:0:7} 在本地找不到（别人部署了未推送的代码，或 git 历史被重写过）"
+  if ! git cat-file -e "$OLD_REV^{commit}" 2>/dev/null || [[ -z $(git branch -r --contains "$OLD_REV" 2>/dev/null) ]]; then
+    fail_or_force "manager 上部署的 ${OLD_REV:0:7} 不在 origin 上（别人部署了未推送的代码，或 git 历史被重写过）"
   elif ! git merge-base --is-ancestor "$OLD_REV" "$REV"; then
     fail_or_force "manager 上的 ${OLD_REV:0:7} 不是 HEAD 的祖先（别人部署了你没合并的提交，先 git pull）"
   fi
