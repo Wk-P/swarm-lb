@@ -10,6 +10,7 @@
 stack = "collect_data_stack"
 image = "soar009/collect_data_app:v8"
 manager_ip = "x.x.x.x"
+agent_port = 9100         # 每个节点上的监控 agent（agent/node_agent.py，deploy/deploy-agents.sh 部署）
 
 [[node]]
 name = "manager"
@@ -49,6 +50,14 @@ title = "运维管理界面"
 script = "ops/server.py"
 managed = true            # unit 文件在本仓库 deploy/systemd/，deploy 时安装
 self = true               # 界面自身：不提供"停止"按钮
+
+[[service]]
+port = 9100
+unit = "swarm-lb-agent.service"
+owner = "ours"
+title = "节点监控 agent"
+script = "agent/node_agent.py"
+note = "所有节点都有一份（~/swarm-lb-agent/），由 deploy/deploy-agents.sh 部署；这里只列 manager 本机这份"
 
 [[service]]
 port = 8080
