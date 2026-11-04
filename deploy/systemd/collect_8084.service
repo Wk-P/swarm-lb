@@ -1,0 +1,20 @@
+# 由 swarm-lb 仓库管理：deploy/systemd/collect_8084.service  (deploy/deploy-manager.sh 安装)
+[Unit]
+Description=swarm-lb 8084 XGB collector handle_hdd_v2 rr [ours]
+After=network.target
+
+[Service]
+Type=simple
+
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/swarm-lb/manager/
+
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=/home/pi/swarm-lb/.venv/bin/python /home/pi/swarm-lb/manager/manager_xgbdata_collector_handle_hdd_v2.py
+
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

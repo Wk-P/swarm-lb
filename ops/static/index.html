@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>swarm-lb 运维</title>
+<style>
+:root{
+  --bg:#f6f7f9;--panel:#fff;--text:#1d2228;--muted:#69727d;--line:#e3e6ea;
+  --accent:#2563eb;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--idle:#8a939e;
+  --ours:#dbeafe;--ours-t:#1e40af;--others:#fde2e2;--others-t:#9f1239;--unk:#eceef1;--unk-t:#4b5563;
+  --code:#f1f3f5;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111418;--panel:#1a1e24;--text:#e6e9ed;--muted:#9aa3ad;--line:#2b3139;
+  --accent:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--idle:#6b7480;
+  --ours:#1e3a5f;--ours-t:#bfdbfe;--others:#4c1d24;--others-t:#fecdd3;--unk:#2b3139;--unk-t:#cbd2d9;
+  --code:#0d1014;
+}}
+:root[data-theme="dark"]{
+  --bg:#111418;--panel:#1a1e24;--text:#e6e9ed;--muted:#9aa3ad;--line:#2b3139;
+  --accent:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--idle:#6b7480;
+  --ours:#1e3a5f;--ours-t:#bfdbfe;--others:#4c1d24;--others-t:#fecdd3;--unk:#2b3139;--unk-t:#cbd2d9;
+  --code:#0d1014;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0;font-weight:650}
+header .sub{color:var(--muted);font-size:13px}
+header .sp{flex:1}
+main{max-width:1280px;margin:0 auto;padding:16px 20px 40px}
+section{margin-top:20px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.stat .k{color:var(--muted);font-size:12px}.stat .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.bar{height:4px;background:var(--line);border-radius:2px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--panel);position:sticky;top:0}
+tr:last-child td{border-bottom:none}
+td.wrap{white-space:normal;min-width:220px}
+.muted{color:var(--muted)}.small{font-size:12px}
+code{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code);padding:1px 5px;border-radius:4px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--idle)}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
+.tag{display:inline-block;padding:0 8px;border-radius:999px;font-size:12px;line-height:20px}
+.tag.ours{background:var(--ours);color:var(--ours-t)}.tag.others{background:var(--others);color:var(--others-t)}.tag.unknown{background:var(--unk);color:var(--unk-t)}
+.port{font-weight:650;font-size:15px}
+tr.others td,tr.unknown td{opacity:.78}
+button{font:inherit;font-size:12px;padding:3px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.danger:hover{border-color:var(--bad);color:var(--bad)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.btns{display:flex;gap:6px}
+#err{color:var(--bad);font-size:13px}
+dialog{width:min(1100px,96vw);height:min(80vh,900px);border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:0}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog .hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+dialog pre{margin:0;padding:12px 14px;height:calc(100% - 50px);overflow:auto;font:12px/1.45 ui-monospace,Consolas,monospace;background:var(--code);white-space:pre-wrap;word-break:break-all}
+#toast{position:fixed;right:16px;bottom:16px;background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:60vw}
+#toast.show{opacity:1}
+@media (max-width:640px){header,main{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>swarm-lb 运维</h1>
+  <span class="sub" id="sub">加载中…</span>
+  <span class="sp"></span>
+  <span id="err"></span>
+  <label class="small muted"><input type="checkbox" id="auto" checked> 每 5 秒刷新</label>
+  <button id="refresh">刷新</button>
+</header>
+<main>
+  <section><div class="stats" id="host"></div></section>
+
+  <section>
+    <h2>Manager-Node 服务（按端口）</h2>
+    <div class="panel"><table>
+      <thead><tr><th>端口</th><th>服务</th><th>归属</th><th>状态</th><th>队列</th><th>unit / 脚本</th><th>操作</th></tr></thead>
+      <tbody id="svc"></tbody>
+    </table></div>
+    <p class="small muted">只有 <span class="tag ours">我们的</span> 可以操作；<span class="tag others">他人的</span>、<span class="tag unknown">未确认</span> 只读。归属登记在仓库 <code>inventory.toml</code>。</p>
+  </section>
+
+  <section>
+    <h2>Swarm 节点</h2>
+    <div class="panel"><table>
+      <thead><tr><th>节点</th><th>IP</th><th>角色</th><th>label</th><th>状态</th><th>资源</th><th>Docker</th><th>容器 :8080</th></tr></thead>
+      <tbody id="nodes"></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Swarm 服务 <span class="muted" id="stackname"></span></h2>
+    <div class="panel"><table>
+      <thead><tr><th>服务</th><th>副本</th><th>节点 / 状态</th><th>约束</th><th>限额</th><th>镜像</th></tr></thead>
+      <tbody id="swarm"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<dialog id="logdlg">
+  <div class="hd"><strong id="logtitle"></strong><span class="sp" style="flex:1"></span>
+    <select id="logn"><option>200</option><option selected>500</option><option>2000</option></select>
+    <button id="logreload">刷新</button><button id="logclose">关闭</button></div>
+  <pre id="logtext"></pre>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const GB = b => (b/1024**3).toFixed(1);
+const dur = s => { s = Math.floor(s); const d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60);
+  return d ? `${d}天${h}时` : h ? `${h}时${m}分` : `${m}分`; };
+const ago = iso => { if (!iso) return ""; const t = Date.parse(iso.replace(/(\.\d{3})\d+/, "$1")); return isNaN(t) ? "" : dur((Date.now()-t)/1000) + "前"; };
+const OWNER = {ours:"我们的", others:"他人的", unknown:"未确认"};
+
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),3500); }
+
+function stat(k, v, pct){ return `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${pct!=null?`<div class="bar"><i style="width:${Math.min(100,pct).toFixed(0)}%"></i></div>`:""}</div>`; }
+
+function renderHost(h){
+  const memUsed = h.mem_total - h.mem_avail;
+  $("#host").innerHTML =
+    stat("负载 1/5/15 分钟", h.load.map(x=>x.toFixed(2)).join(" / "), h.load[0]/h.cpus*100) +
+    stat("内存", `${GB(memUsed)} / ${GB(h.mem_total)} GB`, memUsed/h.mem_total*100) +
+    stat("根分区", `${GB(h.disk_used)} / ${GB(h.disk_total)} GB`, h.disk_used/h.disk_total*100) +
+    stat("CPU 温度", h.temp_c!=null ? h.temp_c.toFixed(1)+" °C" : "—") +
+    stat("运行时间", dur(h.uptime_s));
+}
+
+function stateCell(s){
+  const st = s.systemd || {};
+  if (st.LoadState === "not-found") return `<span class="dot"></span><span class="muted">unit 不存在</span>`;
+  const a = st.ActiveState, cls = a==="active" ? "ok" : a==="failed" ? "bad" : a==="activating"||a==="deactivating" ? "warn" : "";
+  const since = a==="active" && st.ActiveEnterTimestamp ? `<div class="small muted">起于 ${esc(st.ActiveEnterTimestamp.replace(/^\w+ /,""))}</div>` : "";
+  const en = st.UnitFileState ? `<span class="small muted"> · ${st.UnitFileState==="enabled"?"开机自启":esc(st.UnitFileState)}</span>` : "";
+  const lis = s.port ? (s.listening ? ` <span class="small" style="color:var(--ok)">● 监听中</span>` : (a==="active" ? ` <span class="small" style="color:var(--warn)">端口未监听</span>` : "")) : "";
+  return `<span class="dot ${cls}"></span>${esc(a||"?")}${en}${lis}${since}`;
+}
+
+function queueCell(q){
+  if (!q) return `<span class="muted">—</span>`;
+  if (q.error) return `<span class="small" style="color:var(--warn)">${esc(q.error)}</span>`;
+  const ws = Object.values(q.worker_status||{});
+  const busy = ws.filter(x=>x!=="idle").length;
+  const counts = Object.entries(q.status_counts||{}).map(([k,v])=>`${k}:${v}`).join(" ");
+  return `排队 <b>${q.queue_size??"?"}</b> · 共 ${q.total_tasks??"?"}<div class="small muted">worker 忙 ${busy}/${ws.length}${counts?" · "+esc(counts):""}</div>`;
+}
+
+function renderServices(list){
+  $("#svc").innerHTML = list.map(s => {
+    const ours = s.owner === "ours", active = s.systemd?.ActiveState === "active", nf = s.systemd?.LoadState === "not-found";
+    const u = encodeURIComponent(s.unit);
+    let btns = `<button data-log="${esc(s.unit)}">日志</button>`;
+    if (ours && !nf){
+      if (!s.self) btns += active
+        ? `<button class="danger" data-act="stop" data-unit="${esc(s.unit)}">停止</button>`
+        : `<button data-act="start" data-unit="${esc(s.unit)}">启动</button>`;
+      btns += `<button data-act="restart" data-unit="${esc(s.unit)}">重启</button>`;
+    }
+    return `<tr class="${esc(s.owner)}">
+      <td class="port">${s.port||"—"}</td>
+      <td class="wrap"><div>${esc(s.title)}</div>${s.note?`<div class="small muted">${esc(s.note)}</div>`:""}</td>
+      <td><span class="tag ${esc(s.owner)}">${OWNER[s.owner]||esc(s.owner)}</span></td>
+      <td>${stateCell(s)}</td>
+      <td>${queueCell(s.queue)}</td>
+      <td class="small"><code>${esc(s.unit)}</code><div class="muted">${esc(s.script||"")}</div></td>
+      <td><div class="btns">${btns}</div></td></tr>`;
+  }).join("");
+}
+
+function renderNodes(d, inv, app){
+  const byName = Object.fromEntries(inv.map(n=>[n.name,n]));
+  const nodes = d.nodes || [];
+  if (!nodes.length){ $("#nodes").innerHTML = `<tr><td colspan="8" class="muted">${esc(d.error||"无数据")}</td></tr>`; return; }
+  nodes.sort((a,b)=>a.hostname.localeCompare(b.hostname));
+  $("#nodes").innerHTML = nodes.map(n => {
+    const i = byName[n.hostname] || {};
+    const ok = n.state==="ready" && n.availability==="active";
+    const a = app[n.hostname];
+    return `<tr><td><b>${esc(n.hostname)}</b>${n.leader?` <span class="tag ours">leader</span>`:""}<div class="small muted">ssh ${esc(i.ssh||"")}</div></td>
+      <td>${esc(n.addr||i.ip)}</td><td>${esc(n.role)}</td>
+      <td>${esc(n.labels?.type||"—")}</td>
+      <td><span class="dot ${ok?"ok":"bad"}"></span>${esc(n.state)} / ${esc(n.availability)}</td>
+      <td>${n.cpus} 核 · ${GB(n.mem)} GB</td><td class="small">${esc(n.engine)}</td>
+      <td>${a===undefined?`<span class="muted">—</span>`:a?`<span class="dot ok"></span>可连接`:`<span class="dot bad"></span>不通`}</td></tr>`;
+  }).join("");
+}
+
+function renderSwarm(d){
+  const ss = d.services || [];
+  if (!ss.length){ $("#swarm").innerHTML = `<tr><td colspan="6" class="muted">${esc(d.error||"无服务")}</td></tr>`; return; }
+  $("#swarm").innerHTML = ss.map(s => {
+    const ok = s.running === s.replicas;
+    const tasks = s.tasks.filter(t=>t.desired==="running").concat(s.tasks.filter(t=>t.desired!=="running").slice(0,1))
+      .map(t=>`<div><span class="dot ${t.state==="running"?"ok":t.state==="failed"||t.state==="rejected"?"bad":"warn"}"></span>${esc(t.node)} · ${esc(t.state)} <span class="small muted">${ago(t.since)}</span>${t.err?`<div class="small" style="color:var(--bad)">${esc(t.err)}</div>`:""}</div>`).join("");
+    return `<tr><td><b>${esc(s.name)}</b></td>
+      <td><span class="dot ${ok?"ok":"bad"}"></span>${s.running}/${s.replicas??"global"}</td>
+      <td>${tasks}</td>
+      <td class="small">${s.constraints.map(c=>`<div><code>${esc(c)}</code></div>`).join("")}</td>
+      <td class="small">${s.cpu_limit?s.cpu_limit+" 核":""}${s.mem_limit?" · "+GB(s.mem_limit)+" GB":""}</td>
+      <td class="small"><code>${esc(s.image)}</code></td></tr>`;
+  }).join("");
+}
+
+let busy = false;
+async function load(){
+  if (busy) return; busy = true;
+  try{
+    const r = await fetch("/api/overview"); if (!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+    $("#err").textContent = "";
+    $("#sub").textContent = `${d.host.hostname} · ${d.cluster.manager_ip} · 更新于 ${new Date(d.time*1000).toLocaleTimeString()}`;
+    $("#stackname").textContent = "· " + (d.cluster.stack||"");
+    renderHost(d.host); renderServices(d.services);
+    renderNodes(d.docker, d.inventory_nodes, d.worker_app_8080); renderSwarm(d.docker);
+  }catch(e){ $("#err").textContent = "刷新失败：" + e.message; }
+  finally{ busy = false; }
+}
+
+let logUnit = null;
+async function loadLog(){
+  $("#logtext").textContent = "加载中…";
+  const r = await fetch(`/api/unit/${encodeURIComponent(logUnit)}/logs?n=${$("#logn").value}`);
+  const d = await r.json(); const pre = $("#logtext");
+  pre.textContent = d.text || d.msg || "(空)"; pre.scrollTop = pre.scrollHeight;
+}
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.log){ logUnit = b.dataset.log; $("#logtitle").textContent = logUnit; $("#logdlg").showModal(); loadLog(); }
+  if (b.dataset.act){
+    const {act, unit} = b.dataset;
+    const zh = {start:"启动", stop:"停止", restart:"重启"}[act];
+    if (!confirm(`确定${zh} ${unit}？`)) return;
+    b.disabled = true;
+    try{
+      const r = await fetch(`/api/unit/${encodeURIComponent(unit)}/${act}`, {method:"POST"});
+      const d = await r.json(); toast((d.ok?"✓ ":"✗ ") + zh + " " + unit + (d.ok ? "" : "：" + d.msg));
+    }catch(err){ toast("✗ " + err.message); }
+    setTimeout(load, 1200);
+  }
+});
+$("#logclose").onclick = () => $("#logdlg").close();
+$("#logreload").onclick = loadLog; $("#logn").onchange = loadLog;
+$("#refresh").onclick = load;
+setInterval(() => { if ($("#auto").checked && !document.hidden) load(); }, 5000);
+load();
+</script>
+</body>
+</html>

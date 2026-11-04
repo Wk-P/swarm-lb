@@ -1,0 +1,21 @@
+# 由 swarm-lb 仓库管理：deploy/systemd/collect_8080.service  (deploy/deploy-manager.sh 安装)
+[Unit]
+Description=swarm-lb 8080 manager_hmsw [ours]
+After=network.target
+
+[Service]
+Type=simple
+
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/swarm-lb/manager/
+
+Environment=PYTHONUNBUFFERED=1
+Environment=RGB_LICENSE_FILE=/home/pi/gurobi.lic
+Environment=GRB_LICENSE_FILE=/home/pi/gurobi.lic
+ExecStart=/home/pi/swarm-lb/.venv/bin/python /home/pi/swarm-lb/manager/manager_hmsw.py
+
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

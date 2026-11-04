@@ -1,0 +1,39 @@
+[project]
+name = "swarm-lb"
+version = "0.8.0"
+description = "Raspberry Pi Docker Swarm task load-balancing experiments (manager services + ops UI)"
+readme = "README.md"
+# Manager-Node 系统 Python 是 3.11.2；锁在 3.11 保证 Windows 与 Pi 解析一致
+requires-python = "==3.11.*"
+
+# 默认依赖 = Manager-Node 上我们的常驻服务（8082 / 8084 采集器 + 80 运维界面）
+# 版本与原 ~/apps/manager_server/.venv 中线上实际运行的一致
+dependencies = [
+    "aiohttp==3.11.6",
+    "docker==7.1.0",
+    "paramiko==3.5.0",
+    "pandas==3.0.1",
+]
+
+[dependency-groups]
+# 8080 manager_hmsw*.py 及 LB_algorithm/model 所需（DQN、gurobi、xgboost 预测）
+algo = [
+    "numpy==2.1.3",
+    "joblib==1.4.2",
+    "torch==2.5.1",
+    "gurobipy==12.0.0",
+    "scipy==1.14.1",
+    "scikit-learn==1.8.0",
+    "xgboost==2.1.2",
+    "matplotlib==3.9.2",
+]
+# Windows 端发请求的客户端 client-windows/
+client = [
+    "requests==2.32.3",
+    "psutil",
+]
+
+[tool.uv]
+package = false
+# 部署到 manager 时默认装上 algo，保证 8080 随时可从运维界面启动
+default-groups = ["algo"]
