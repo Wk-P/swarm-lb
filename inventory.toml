@@ -90,11 +90,11 @@ note = "manager_xgbdata_collecter.py 也写死 8082，不能同时运行"
 [[service]]
 port = 8083
 unit = "collect_8083.service"
-owner = "others"
+owner = "ours"
 title = "XGB 数据采集 · Least Time"
 script = "~/appv8/manager/manager_xgbdata_collecter_lstt.py"
 status_path = "/queue/status"
-note = "按他人使用处理（待确认），勿动。仍用 ~/apps/manager_server/.venv + ~/appv8"
+note = "2026-11-04 确认归我们。unit 不在本仓库（未 managed），仍用 ~/apps/manager_server/.venv + ~/appv8"
 
 [[service]]
 port = 8084

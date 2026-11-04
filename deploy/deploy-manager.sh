@@ -8,7 +8,7 @@
 # 安全约束：
 #   - 只安装 deploy/systemd/ 里、且在 inventory.toml 登记为 owner="ours" + managed=true 的 unit
 #   - 被替换的旧 unit 先备份到 ~/swarm-bak/systemd/<时间戳>/
-#   - 不碰 ~/appv8、~/apps 及其 venv（8081 / 8083 他人服务在用）
+#   - 不碰 ~/appv8、~/apps 及其 venv（8081 他人服务、8083 仍在用）
 #   - 不会 enable collect_8080（开机不自启，需要时在运维界面手动启动）
 set -euo pipefail
 

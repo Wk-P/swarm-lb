@@ -3,255 +3,668 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>swarm-lb 运维</title>
+<title>swarm-lb 集群</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='8' r='4' fill='%23a78bfa'/%3E%3Ccircle cx='7' cy='24' r='4' fill='%2334d399'/%3E%3Ccircle cx='16' cy='24' r='4' fill='%2360a5fa'/%3E%3Ccircle cx='25' cy='24' r='4' fill='%23f472b6'/%3E%3C/svg%3E">
 <style>
-:root{
-  --bg:#f6f7f9;--panel:#fff;--text:#1d2228;--muted:#69727d;--line:#e3e6ea;
-  --accent:#2563eb;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--idle:#8a939e;
-  --ours:#dbeafe;--ours-t:#1e40af;--others:#fde2e2;--others-t:#9f1239;--unk:#eceef1;--unk-t:#4b5563;
-  --code:#f1f3f5;
+:root {
+  --bg: #0c0e13; --bg2: #11141b;
+  --surface: rgba(255,255,255,.035); --surface-2: rgba(255,255,255,.06); --surface-solid: #151922;
+  --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.14);
+  --ink: #e9ebf1; --ink-2: #a6acbb; --ink-3: #6c7385;
+  --ok: #34d399; --warn: #fbbf24; --bad: #fb7185; --info: #60a5fa;
+  --n-manager: #a78bfa; --n-low: #34d399; --n-middle: #60a5fa; --n-high: #f472b6;
+  --glow-1: rgba(167,139,250,.16); --glow-2: rgba(52,211,153,.10);
+  --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 12px 32px -18px rgba(0,0,0,.6);
+  color-scheme: dark;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#111418;--panel:#1a1e24;--text:#e6e9ed;--muted:#9aa3ad;--line:#2b3139;
-  --accent:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--idle:#6b7480;
-  --ours:#1e3a5f;--ours-t:#bfdbfe;--others:#4c1d24;--others-t:#fecdd3;--unk:#2b3139;--unk-t:#cbd2d9;
-  --code:#0d1014;
-}}
-:root[data-theme="dark"]{
-  --bg:#111418;--panel:#1a1e24;--text:#e6e9ed;--muted:#9aa3ad;--line:#2b3139;
-  --accent:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--idle:#6b7480;
-  --ours:#1e3a5f;--ours-t:#bfdbfe;--others:#4c1d24;--others-t:#fecdd3;--unk:#2b3139;--unk-t:#cbd2d9;
-  --code:#0d1014;
+:root[data-theme="light"] {
+  --bg: #f5f4f0; --bg2: #efede7;
+  --surface: rgba(255,255,255,.7); --surface-2: rgba(20,20,40,.04); --surface-solid: #ffffff;
+  --line: rgba(20,20,40,.08); --line-2: rgba(20,20,40,.16);
+  --ink: #1b1d24; --ink-2: #555b6b; --ink-3: #8c92a1;
+  --ok: #059669; --warn: #d97706; --bad: #e11d48; --info: #2563eb;
+  --n-manager: #7c3aed; --n-low: #059669; --n-middle: #2563eb; --n-high: #db2777;
+  --glow-1: rgba(124,58,237,.10); --glow-2: rgba(5,150,105,.08);
+  --shadow: 0 1px 2px rgba(20,20,40,.04), 0 12px 28px -20px rgba(20,20,40,.25);
+  color-scheme: light;
 }
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
-header h1{font-size:16px;margin:0;font-weight:650}
-header .sub{color:var(--muted);font-size:13px}
-header .sp{flex:1}
-main{max-width:1280px;margin:0 auto;padding:16px 20px 40px}
-section{margin-top:20px}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
-.stat .k{color:var(--muted);font-size:12px}.stat .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
-.bar{height:4px;background:var(--line);border-radius:2px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
-th{font-size:12px;color:var(--muted);font-weight:600;background:var(--panel);position:sticky;top:0}
-tr:last-child td{border-bottom:none}
-td.wrap{white-space:normal;min-width:220px}
-.muted{color:var(--muted)}.small{font-size:12px}
-code{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code);padding:1px 5px;border-radius:4px}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--idle)}
-.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
-.tag{display:inline-block;padding:0 8px;border-radius:999px;font-size:12px;line-height:20px}
-.tag.ours{background:var(--ours);color:var(--ours-t)}.tag.others{background:var(--others);color:var(--others-t)}.tag.unknown{background:var(--unk);color:var(--unk-t)}
-.port{font-weight:650;font-size:15px}
-tr.others td,tr.unknown td{opacity:.78}
-button{font:inherit;font-size:12px;padding:3px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
-button:hover{border-color:var(--accent)}
-button.danger:hover{border-color:var(--bad);color:var(--bad)}
-button:disabled{opacity:.4;cursor:not-allowed}
-.btns{display:flex;gap:6px}
-#err{color:var(--bad);font-size:13px}
-dialog{width:min(1100px,96vw);height:min(80vh,900px);border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:0}
-dialog::backdrop{background:rgba(0,0,0,.45)}
-dialog .hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
-dialog pre{margin:0;padding:12px 14px;height:calc(100% - 50px);overflow:auto;font:12px/1.45 ui-monospace,Consolas,monospace;background:var(--code);white-space:pre-wrap;word-break:break-all}
-#toast{position:fixed;right:16px;bottom:16px;background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:60vw}
-#toast.show{opacity:1}
-@media (max-width:640px){header,main{padding-left:16px;padding-right:16px}}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f4f0; --bg2: #efede7;
+    --surface: rgba(255,255,255,.7); --surface-2: rgba(20,20,40,.04); --surface-solid: #ffffff;
+    --line: rgba(20,20,40,.08); --line-2: rgba(20,20,40,.16);
+    --ink: #1b1d24; --ink-2: #555b6b; --ink-3: #8c92a1;
+    --ok: #059669; --warn: #d97706; --bad: #e11d48; --info: #2563eb;
+    --n-manager: #7c3aed; --n-low: #059669; --n-middle: #2563eb; --n-high: #db2777;
+    --glow-1: rgba(124,58,237,.10); --glow-2: rgba(5,150,105,.08);
+    --shadow: 0 1px 2px rgba(20,20,40,.04), 0 12px 28px -20px rgba(20,20,40,.25);
+    color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background:
+    radial-gradient(900px 500px at 8% -10%, var(--glow-1), transparent 60%),
+    radial-gradient(800px 480px at 100% 0%, var(--glow-2), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--ink);
+  font: 14px/1.5 "Inter", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.mono { font-family: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace; font-size: .95em; }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 24px 64px; }
+button { font: inherit; color: inherit; }
+
+/* ---------- top ---------- */
+header { display: flex; align-items: center; gap: 16px; padding: 22px 0 8px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: .2px; font-size: 15px; }
+.brand svg { width: 26px; height: 26px; }
+.brand small { color: var(--ink-3); font-weight: 500; }
+.spacer { flex: 1; }
+.live { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 12px; }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 2.4s infinite; }
+.pulse.stale { background: var(--warn); animation: none; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; cursor: pointer; color: var(--ink-2); transition: .15s; }
+.icon-btn:hover { color: var(--ink); border-color: var(--line-2); background: var(--surface-2); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+.hero { padding: 26px 0 22px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px 40px; }
+.hero h1 { margin: 0; font-size: clamp(26px, 3.4vw, 38px); font-weight: 650; letter-spacing: -.5px; line-height: 1.15; }
+.hero h1 .ok { color: var(--ok); }
+.hero h1 .warn { color: var(--warn); }
+.issues { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.issue { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.issue.bad { border-color: color-mix(in srgb, var(--bad) 45%, transparent); color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
+.kpis { display: flex; gap: 28px; flex-wrap: wrap; }
+.kpi .v { font-size: 22px; font-weight: 600; }
+.kpi .v small { font-size: 13px; color: var(--ink-3); font-weight: 500; margin-left: 2px; }
+.kpi .k { color: var(--ink-3); font-size: 12px; }
+
+h2 { font-size: 13px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 1.2px; margin: 36px 0 14px; display: flex; align-items: center; gap: 10px; }
+h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* ---------- node cards ---------- */
+.nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+.node {
+  --c: var(--ink-2);
+  position: relative; border: 1px solid var(--line); background: var(--surface); border-radius: 20px;
+  padding: 18px 18px 14px; box-shadow: var(--shadow); cursor: pointer; overflow: hidden;
+  transition: transform .2s, border-color .2s; backdrop-filter: blur(6px);
+}
+.node::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--c), transparent 80%); opacity: .9; }
+.node:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--c) 45%, var(--line)); }
+.node.offline { opacity: .55; filter: saturate(.3); }
+.node .top { display: flex; align-items: flex-start; gap: 10px; }
+.node .name { font-size: 17px; font-weight: 650; letter-spacing: -.2px; }
+.node .sub { color: var(--ink-3); font-size: 12px; margin-top: 1px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); white-space: nowrap; }
+.chip.muted { --c: var(--ink-3); }
+.node .body { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; align-items: center; margin: 14px 0 6px; }
+.meters, .node .top > div { min-width: 0; }
+.ring { position: relative; width: 96px; height: 96px; }
+.ring svg { width: 96px; height: 96px; transform: rotate(-90deg); }
+.ring .track { stroke: var(--surface-2); }
+.ring .val { stroke: var(--c); stroke-linecap: round; transition: stroke-dasharray .6s ease; }
+.ring .lbl { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.ring .lbl b { font-size: 22px; font-weight: 650; line-height: 1; }
+.ring .lbl b small { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.ring .lbl span { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+.cores { display: flex; gap: 3px; justify-content: center; margin-top: 4px; }
+.cores i { width: 6px; height: 14px; border-radius: 2px; background: var(--surface-2); position: relative; overflow: hidden; }
+.cores i::after { content: ""; position: absolute; inset: auto 0 0 0; height: var(--h); background: var(--c); opacity: .75; }
+.meters { display: grid; gap: 9px; }
+.meter .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.meter .row b { color: var(--ink); font-weight: 600; }
+.bar { height: 5px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; border-radius: inherit; background: var(--c); transition: width .6s ease; }
+.bar.warn i { background: var(--warn); } .bar.bad i { background: var(--bad); }
+.t-ok { color: var(--ink) !important; } .t-warn { color: var(--warn) !important; } .t-bad { color: var(--bad) !important; }
+.spark { height: 50px; margin: 8px -18px 0; }
+.spark svg { width: 100%; height: 100%; display: block; }
+.flow { display: flex; gap: 3px 14px; font-size: 11.5px; color: var(--ink-3); margin-top: 6px; flex-wrap: wrap; line-height: 1.6; }
+.flow b { color: var(--ink-2); font-weight: 500; }
+.ctrs { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.ctr { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.ctr .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+.ctr .dot.off { background: var(--ink-3); }
+.ctr .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctr .st { color: var(--ink-3); }
+.empty { color: var(--ink-3); font-size: 12px; }
+
+/* ---------- services ---------- */
+.svcs { display: grid; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 12px; }
+.svc { border: 1px solid var(--line); background: var(--surface); border-radius: 16px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow); }
+.svc.dim { opacity: .62; }
+.svc .head { display: flex; align-items: center; gap: 10px; }
+.svc .port { font-size: 24px; font-weight: 650; letter-spacing: -.5px; }
+.svc .port.none { font-size: 15px; color: var(--ink-3); }
+.svc .state { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+.sdot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+.sdot.fail { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 18%, transparent); }
+.svc .title { font-weight: 600; font-size: 13.5px; }
+.svc .unit { color: var(--ink-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc .foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
+.slots { display: flex; gap: 4px; align-items: center; font-size: 11.5px; color: var(--ink-3); }
+.slots i { width: 12px; height: 12px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); }
+.slots i.busy { background: var(--info); border-color: transparent; }
+.acts { margin-left: auto; display: flex; gap: 4px; }
+.act { border: 1px solid transparent; background: transparent; height: 28px; min-width: 28px; padding: 0 7px; border-radius: 8px; cursor: pointer; color: var(--ink-3); display: inline-flex; align-items: center; gap: 5px; font-size: 12px; transition: .15s; }
+.act:hover { color: var(--ink); background: var(--surface-2); border-color: var(--line); }
+.act svg { width: 14px; height: 14px; }
+.act.armed { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); background: color-mix(in srgb, var(--bad) 10%, transparent); }
+.act[disabled] { opacity: .4; pointer-events: none; }
+
+/* ---------- swarm services ---------- */
+.stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.ss { border: 1px solid var(--line); background: var(--surface); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
+.ss .nm { font-weight: 600; }
+.ss .img { color: var(--ink-3); font-size: 11.5px; margin-top: 2px; }
+.ss .reps { display: flex; gap: 5px; margin: 10px 0 8px; align-items: center; }
+.ss .reps i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ok); }
+.ss .reps i.up { background: var(--ok); }
+.ss .reps span { font-size: 12px; color: var(--ink-2); margin-left: 6px; }
+.ss .meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11.5px; }
+.ss .err { color: var(--bad); font-size: 11.5px; margin-top: 6px; }
+
+/* ---------- drawer ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); backdrop-filter: blur(2px); opacity: 0; pointer-events: none; transition: .2s; z-index: 20; }
+.scrim.open { opacity: 1; pointer-events: auto; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 100vw); background: var(--surface-solid); border-left: 1px solid var(--line); z-index: 21; transform: translateX(100%); transition: transform .28s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; box-shadow: -24px 0 48px -24px rgba(0,0,0,.5); }
+.drawer.open { transform: none; }
+.drawer .dh { display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.drawer .dh .t { font-weight: 650; font-size: 16px; }
+.drawer .dh .s { color: var(--ink-3); font-size: 12px; }
+.drawer .db { overflow: auto; padding: 18px 20px 28px; flex: 1; }
+.drawer pre { margin: 0; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; color: var(--ink-2); }
+.chart { margin-bottom: 20px; }
+.chart .ct { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; margin-bottom: 6px; }
+.chart .ct b { font-weight: 600; }
+.chart .ct .lg { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-3); font-size: 11.5px; }
+.chart .ct .lg i { width: 10px; height: 3px; border-radius: 2px; background: var(--lc); }
+.chart .ct .now { margin-left: auto; color: var(--ink-2); }
+.chart svg { width: 100%; height: 120px; display: block; border-radius: 10px; background: var(--surface-2); }
+.chart .ax { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-3); margin-top: 3px; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 22px; }
+.kv div { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+.kv span { display: block; font-size: 11px; color: var(--ink-3); }
+.kv b { font-weight: 600; font-size: 14px; }
+
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--surface-solid); border: 1px solid var(--line-2); padding: 10px 16px; border-radius: 12px; font-size: 13px; opacity: 0; transition: .25s; z-index: 30; box-shadow: var(--shadow); max-width: calc(100vw - 32px); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.bad { border-color: var(--bad); color: var(--bad); }
+
+@media (max-width: 640px) {
+  .wrap { padding: 0 16px 48px; }
+  .hero { padding-top: 12px; }
+  .node .body { grid-template-columns: 84px minmax(0, 1fr); }
+  .ring, .ring svg { width: 84px; height: 84px; }
+  .nodes, .svcs, .stack { grid-template-columns: minmax(0, 1fr); }
+  .kpis { gap: 18px; }
+  .kpi .v { font-size: 18px; }
+  #updated { display: none; }
+}
 </style>
 </head>
 <body>
-<header>
-  <h1>swarm-lb 运维</h1>
-  <span class="sub" id="sub">加载中…</span>
-  <span class="sp"></span>
-  <span id="err"></span>
-  <label class="small muted"><input type="checkbox" id="auto" checked> 每 5 秒刷新</label>
-  <button id="refresh">刷新</button>
-</header>
-<main>
-  <section><div class="stats" id="host"></div></section>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 8 7 24M16 8v16M16 8l9 16" stroke="currentColor" stroke-opacity=".25" stroke-width="1.5"/><circle cx="16" cy="8" r="4" fill="var(--n-manager)"/><circle cx="7" cy="24" r="3.5" fill="var(--n-low)"/><circle cx="16" cy="24" r="3.5" fill="var(--n-middle)"/><circle cx="25" cy="24" r="3.5" fill="var(--n-high)"/></svg>
+      swarm-lb <small id="stackName"></small>
+    </div>
+    <div class="spacer"></div>
+    <div class="live"><span class="pulse" id="pulse"></span><span id="updated">连接中…</span></div>
+    <button class="icon-btn" id="themeBtn" title="切换主题" aria-label="切换主题">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+  </header>
 
-  <section>
-    <h2>Manager-Node 服务（按端口）</h2>
-    <div class="panel"><table>
-      <thead><tr><th>端口</th><th>服务</th><th>归属</th><th>状态</th><th>队列</th><th>unit / 脚本</th><th>操作</th></tr></thead>
-      <tbody id="svc"></tbody>
-    </table></div>
-    <p class="small muted">只有 <span class="tag ours">我们的</span> 可以操作；<span class="tag others">他人的</span>、<span class="tag unknown">未确认</span> 只读。归属登记在仓库 <code>inventory.toml</code>。</p>
+  <section class="hero">
+    <div style="flex:1;min-width:280px">
+      <h1 id="headline">正在读取集群状态…</h1>
+      <div class="issues" id="issues"></div>
+    </div>
+    <div class="kpis" id="kpis"></div>
   </section>
 
-  <section>
-    <h2>Swarm 节点</h2>
-    <div class="panel"><table>
-      <thead><tr><th>节点</th><th>IP</th><th>角色</th><th>label</th><th>状态</th><th>资源</th><th>Docker</th><th>容器 :8080</th></tr></thead>
-      <tbody id="nodes"></tbody>
-    </table></div>
-  </section>
+  <h2>节点</h2>
+  <div class="nodes" id="nodes"></div>
 
-  <section>
-    <h2>Swarm 服务 <span class="muted" id="stackname"></span></h2>
-    <div class="panel"><table>
-      <thead><tr><th>服务</th><th>副本</th><th>节点 / 状态</th><th>约束</th><th>限额</th><th>镜像</th></tr></thead>
-      <tbody id="swarm"></tbody>
-    </table></div>
-  </section>
-</main>
+  <h2>Manager 上的服务</h2>
+  <div class="svcs" id="svcs"></div>
 
-<dialog id="logdlg">
-  <div class="hd"><strong id="logtitle"></strong><span class="sp" style="flex:1"></span>
-    <select id="logn"><option>200</option><option selected>500</option><option>2000</option></select>
-    <button id="logreload">刷新</button><button id="logclose">关闭</button></div>
-  <pre id="logtext"></pre>
-</dialog>
-<div id="toast"></div>
+  <h2>Swarm 服务</h2>
+  <div class="stack" id="stack"></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="dh">
+    <div><div class="t" id="dTitle"></div><div class="s" id="dSub"></div></div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="dClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="db" id="dBody"></div>
+</aside>
+<div class="toast" id="toast"></div>
 
 <script>
-const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const GB = b => (b/1024**3).toFixed(1);
-const dur = s => { s = Math.floor(s); const d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60);
-  return d ? `${d}天${h}时` : h ? `${h}时${m}分` : `${m}分`; };
-const ago = iso => { if (!iso) return ""; const t = Date.parse(iso.replace(/(\.\d{3})\d+/, "$1")); return isNaN(t) ? "" : dur((Date.now()-t)/1000) + "前"; };
-const OWNER = {ours:"我们的", others:"他人的", unknown:"未确认"};
+const N = 600;                       // 历史窗口点数（与服务端一致：600 × 3s = 30 分钟）
+const POLL_MS = 3000;
+const SERIES = ["cpu", "mem", "temp", "rx", "tx", "dr", "dw"];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),3500); }
+let OV = null;                       // 最近一次 /api/overview
+let HIST = {};                       // name -> {t:[], cpu:[], ...}
+let lastOk = 0;
+let drawerNode = null;               // 抽屉里正在看的节点名
 
-function stat(k, v, pct){ return `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${pct!=null?`<div class="bar"><i style="width:${Math.min(100,pct).toFixed(0)}%"></i></div>`:""}</div>`; }
+// ---------------------------------------------------------------- theme
+(function () {
+  let t = null;
+  try { t = localStorage.getItem("theme"); } catch (e) {}
+  if (t) document.documentElement.dataset.theme = t;
+  $("themeBtn").onclick = () => {
+    const cur = document.documentElement.dataset.theme
+      || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    const next = cur === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch (e) {}
+    render();
+  };
+})();
 
-function renderHost(h){
-  const memUsed = h.mem_total - h.mem_avail;
-  $("#host").innerHTML =
-    stat("负载 1/5/15 分钟", h.load.map(x=>x.toFixed(2)).join(" / "), h.load[0]/h.cpus*100) +
-    stat("内存", `${GB(memUsed)} / ${GB(h.mem_total)} GB`, memUsed/h.mem_total*100) +
-    stat("根分区", `${GB(h.disk_used)} / ${GB(h.disk_total)} GB`, h.disk_used/h.disk_total*100) +
-    stat("CPU 温度", h.temp_c!=null ? h.temp_c.toFixed(1)+" °C" : "—") +
-    stat("运行时间", dur(h.uptime_s));
+// ---------------------------------------------------------------- format
+const fmtB = (b) => {
+  if (b == null) return "–";
+  const u = ["B", "K", "M", "G", "T"]; let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return (b >= 100 || i === 0 ? b.toFixed(0) : b.toFixed(1)) + u[i];
+};
+const fmtRate = (b) => b == null ? "–" : fmtB(b) + "/s";
+const fmtPct = (v) => v == null ? "–" : (v >= 10 ? v.toFixed(0) : v.toFixed(1));
+const fmtDur = (s) => {
+  if (s == null) return "–";
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}天${h}时` : h ? `${h}时${m}分` : `${m}分`;
+};
+const ago = (ts) => {
+  if (!ts) return "未知";
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  return s < 60 ? `${Math.round(s)} 秒前` : s < 3600 ? `${Math.round(s / 60)} 分钟前` : `${Math.round(s / 3600)} 小时前`;
+};
+const tempCls = (t) => t == null ? "" : t >= 75 ? "t-bad" : t >= 62 ? "t-warn" : "t-ok";
+const barCls = (p) => p >= 90 ? "bad" : p >= 75 ? "warn" : "";
+const shortSvc = (n, stack) => stack && n.startsWith(stack + "_") ? n.slice(stack.length + 1) : n;
+
+const nodeColor = (n) => n.role === "manager" ? "var(--n-manager)" : `var(--n-${n.label || "middle"})`;
+const tierName = { low: "低配", middle: "中配", high: "高配" };
+
+// ---------------------------------------------------------------- svg charts
+function linePath(vals, max, w, h, close) {
+  let d = "", pen = false, first = null, last = null;
+  const step = w / (N - 1), n = vals.length;
+  vals.forEach((v, i) => {
+    if (v == null) { pen = false; return; }
+    const x = w - (n - 1 - i) * step;
+    const y = h - Math.min(1, v / max) * (h - 2) - 1;
+    d += (pen ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+    if (first == null) first = x; last = x; pen = true;
+  });
+  if (close && first != null) d += `L${last.toFixed(1)} ${h}L${first.toFixed(1)} ${h}Z`;
+  return d;
+}
+const autoMax = (...arrs) => {
+  let m = 0; arrs.forEach(a => a.forEach(v => { if (v != null && v > m) m = v; }));
+  return m;
+};
+
+function spark(h, color) {
+  if (!h || !h.t.length) return `<svg viewBox="0 0 300 50" preserveAspectRatio="none"></svg>`;
+  const cpu = h.cpu, mem = h.mem;
+  const gid = "g" + Math.random().toString(36).slice(2, 8);
+  return `<svg viewBox="0 0 300 50" preserveAspectRatio="none">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${color}" stop-opacity=".35"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${linePath(cpu.map(v => v ?? 0), 100, 300, 50, true)}" fill="url(#${gid})"/>
+    <path d="${linePath(cpu, 100, 300, 50)}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+    <path d="${linePath(mem, 100, 300, 50)}" fill="none" stroke="var(--ink-3)" stroke-width="1.2" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+  </svg>`;
 }
 
-function stateCell(s){
-  const st = s.systemd || {};
-  if (st.LoadState === "not-found") return `<span class="dot"></span><span class="muted">unit 不存在</span>`;
-  const a = st.ActiveState, cls = a==="active" ? "ok" : a==="failed" ? "bad" : a==="activating"||a==="deactivating" ? "warn" : "";
-  const since = a==="active" && st.ActiveEnterTimestamp ? `<div class="small muted">起于 ${esc(st.ActiveEnterTimestamp.replace(/^\w+ /,""))}</div>` : "";
-  const en = st.UnitFileState ? `<span class="small muted"> · ${st.UnitFileState==="enabled"?"开机自启":esc(st.UnitFileState)}</span>` : "";
-  const lis = s.port ? (s.listening ? ` <span class="small" style="color:var(--ok)">● 监听中</span>` : (a==="active" ? ` <span class="small" style="color:var(--warn)">端口未监听</span>` : "")) : "";
-  return `<span class="dot ${cls}"></span>${esc(a||"?")}${en}${lis}${since}`;
+function bigChart(title, lines, opt = {}) {
+  const W = 600, H = 120;
+  const max = opt.max ?? Math.max(opt.min || 1, autoMax(...lines.map(l => l.v)) * 1.15);
+  const nowTxt = lines.map(l => {
+    const v = [...l.v].reverse().find(x => x != null);
+    return `${l.name ? l.name + " " : ""}${opt.fmt ? opt.fmt(v) : v}`;
+  }).join(" · ");
+  const grid = [0.25, 0.5, 0.75].map(f => `<line x1="0" x2="${W}" y1="${H * f}" y2="${H * f}" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("");
+  const paths = lines.map((l, i) => (i === 0 && opt.area ? `<path d="${linePath(l.v.map(v => v ?? 0), max, W, H, true)}" fill="${l.c}" fill-opacity=".12"/>` : "")
+    + `<path d="${linePath(l.v, max, W, H)}" fill="none" stroke="${l.c}" stroke-width="1.8" vector-effect="non-scaling-stroke" ${l.dash ? 'stroke-dasharray="4 3"' : ""}/>`).join("");
+  return `<div class="chart">
+    <div class="ct"><b>${esc(title)}</b>${lines.filter(l => l.name).map(l => `<span class="lg" style="--lc:${l.c}"><i></i>${esc(l.name)}</span>`).join("")}<span class="now num">${esc(nowTxt)}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}${paths}</svg>
+    <div class="ax"><span>30 分钟前</span><span>上限 ${esc(opt.fmt ? opt.fmt(max) : max.toFixed(0))}</span><span>现在</span></div>
+  </div>`;
 }
 
-function queueCell(q){
-  if (!q) return `<span class="muted">—</span>`;
-  if (q.error) return `<span class="small" style="color:var(--warn)">${esc(q.error)}</span>`;
-  const ws = Object.values(q.worker_status||{});
-  const busy = ws.filter(x=>x!=="idle").length;
-  const counts = Object.entries(q.status_counts||{}).map(([k,v])=>`${k}:${v}`).join(" ");
-  return `排队 <b>${q.queue_size??"?"}</b> · 共 ${q.total_tasks??"?"}<div class="small muted">worker 忙 ${busy}/${ws.length}${counts?" · "+esc(counts):""}</div>`;
+function ring(pct, label, cores) {
+  const r = 40, C = 2 * Math.PI * r, p = Math.max(0, Math.min(100, pct ?? 0));
+  return `<div>
+    <div class="ring">
+      <svg viewBox="0 0 96 96"><circle class="track" cx="48" cy="48" r="${r}" fill="none" stroke-width="8"/>
+      <circle class="val" cx="48" cy="48" r="${r}" fill="none" stroke-width="8" stroke-dasharray="${(C * p / 100).toFixed(1)} ${C.toFixed(1)}"/></svg>
+      <div class="lbl"><b class="num">${fmtPct(pct)}<small>%</small></b><span>${label}</span></div>
+    </div>
+    ${cores && cores.length ? `<div class="cores" title="各核心">${cores.map(c => `<i style="--h:${Math.min(100, c ?? 0)}%"></i>`).join("")}</div>` : ""}
+  </div>`;
 }
 
-function renderServices(list){
-  $("#svc").innerHTML = list.map(s => {
-    const ours = s.owner === "ours", active = s.systemd?.ActiveState === "active", nf = s.systemd?.LoadState === "not-found";
-    const u = encodeURIComponent(s.unit);
-    let btns = `<button data-log="${esc(s.unit)}">日志</button>`;
-    if (ours && !nf){
-      if (!s.self) btns += active
-        ? `<button class="danger" data-act="stop" data-unit="${esc(s.unit)}">停止</button>`
-        : `<button data-act="start" data-unit="${esc(s.unit)}">启动</button>`;
-      btns += `<button data-act="restart" data-unit="${esc(s.unit)}">重启</button>`;
+// ---------------------------------------------------------------- data
+async function getJSON(url, opt) {
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok && !("ok" in j)) throw new Error(r.status);
+  return j;
+}
+
+function pushHistory(metrics) {
+  for (const [name, m] of Object.entries(metrics || {})) {
+    if (!m.online || !m.ready) continue;
+    const h = HIST[name] ||= Object.fromEntries(["t", ...SERIES].map(k => [k, []]));
+    const t = Math.round(m.ts);
+    if (h.t.length && h.t[h.t.length - 1] >= t) continue;
+    const memPct = m.mem && m.mem.total ? 100 * (m.mem.total - m.mem.avail) / m.mem.total : null;
+    const p = { t, cpu: m.cpu_pct, mem: memPct, temp: m.temp_c, rx: m.net?.rx_bps, tx: m.net?.tx_bps, dr: m.io?.read_bps, dw: m.io?.write_bps };
+    for (const k of ["t", ...SERIES]) { h[k].push(p[k] ?? null); if (h[k].length > N) h[k].shift(); }
+  }
+}
+
+async function tick() {
+  try {
+    OV = await getJSON("/api/overview");
+    pushHistory(OV.metrics);
+    lastOk = Date.now();
+    render();
+  } catch (e) {
+    $("pulse").classList.add("stale");
+    $("updated").textContent = "连接中断，重试中…";
+  }
+}
+
+async function loadHistory() {
+  try {
+    const h = await getJSON("/api/history");
+    HIST = h.nodes || {};
+  } catch (e) {}
+}
+
+// ---------------------------------------------------------------- render
+function issuesOf(ov) {
+  const out = [];
+  for (const n of ov.inventory_nodes) {
+    const m = ov.metrics[n.name];
+    if (!m || !m.online) { out.push({ bad: true, t: `${n.name} 监控离线` }); continue; }
+    if (m.throttled?.now?.length) out.push({ bad: true, t: `${n.name} ${m.throttled.now.join("/")}` });
+    if (m.temp_c >= 75) out.push({ bad: true, t: `${n.name} 温度 ${m.temp_c.toFixed(0)}°C` });
+    else if (m.temp_c >= 62) out.push({ t: `${n.name} 温度偏高 ${m.temp_c.toFixed(0)}°C` });
+    for (const d of m.disks || []) {
+      const p = 100 * d.used / d.total;
+      if (p >= 85) out.push({ bad: p >= 95, t: `${n.name} ${d.mount} 已用 ${p.toFixed(0)}%` });
     }
-    return `<tr class="${esc(s.owner)}">
-      <td class="port">${s.port||"—"}</td>
-      <td class="wrap"><div>${esc(s.title)}</div>${s.note?`<div class="small muted">${esc(s.note)}</div>`:""}</td>
-      <td><span class="tag ${esc(s.owner)}">${OWNER[s.owner]||esc(s.owner)}</span></td>
-      <td>${stateCell(s)}</td>
-      <td>${queueCell(s.queue)}</td>
-      <td class="small"><code>${esc(s.unit)}</code><div class="muted">${esc(s.script||"")}</div></td>
-      <td><div class="btns">${btns}</div></td></tr>`;
+    if (m.mem?.total && m.mem.avail / m.mem.total < 0.1) out.push({ bad: true, t: `${n.name} 内存紧张` });
+    if (n.role === "worker" && ov.worker_app_8080[n.name] === false) out.push({ t: `${n.name} :8080 无响应` });
+  }
+  for (const dn of ov.docker.nodes || []) if (dn.state !== "ready") out.push({ bad: true, t: `swarm 节点 ${dn.hostname} ${dn.state}` });
+  for (const s of ov.services) if (s.systemd?.ActiveState === "failed") out.push({ bad: true, t: `${s.unit} 失败` });
+  for (const s of ov.docker.services || []) if (s.replicas != null && s.running < s.replicas) out.push({ bad: true, t: `${shortSvc(s.name, ov.cluster.stack)} ${s.running}/${s.replicas}` });
+  if (ov.docker.error) out.push({ bad: true, t: "Docker API: " + ov.docker.error });
+  return out;
+}
+
+function renderHero(ov) {
+  const nodes = ov.inventory_nodes;
+  const online = nodes.filter(n => ov.metrics[n.name]?.online);
+  const ms = online.map(n => ov.metrics[n.name]);
+  const iss = issuesOf(ov);
+  $("headline").innerHTML = iss.length
+    ? `<span class="warn">${iss.length} 处需要留意</span>，${online.length}/${nodes.length} 个节点在线`
+    : `<span class="ok">一切正常</span>，${online.length}/${nodes.length} 个节点在线`;
+  $("issues").innerHTML = iss.map(i => `<span class="issue ${i.bad ? "bad" : ""}">${esc(i.t)}</span>`).join("");
+  const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const cpu = avg(ms.map(m => m.cpu_pct).filter(v => v != null));
+  const memU = ms.reduce((s, m) => s + (m.mem.total - m.mem.avail), 0), memT = ms.reduce((s, m) => s + m.mem.total, 0);
+  const tmax = Math.max(...ms.map(m => m.temp_c ?? 0));
+  const ctrs = ms.reduce((s, m) => s + (m.containers || []).filter(c => c.state === "running").length, 0);
+  const busy = ov.services.filter(s => s.queue && s.queue.worker_status).reduce((s, x) => s + Object.values(x.queue.worker_status).filter(v => v !== "idle").length, 0);
+  const qsize = ov.services.filter(s => s.queue && s.queue.queue_size != null).reduce((s, x) => s + x.queue.queue_size, 0);
+  $("kpis").innerHTML = [
+    ["集群 CPU", fmtPct(cpu), "%"],
+    ["内存", fmtB(memU), " / " + fmtB(memT)],
+    ["最高温度", ms.length ? tmax.toFixed(0) : "–", "°C"],
+    ["运行容器", ctrs, ""],
+    ["采集任务", busy ? `${busy} 忙` : "空闲", qsize ? ` · 排队 ${qsize}` : ""],
+  ].map(([k, v, u]) => `<div class="kpi"><div class="v num">${esc(v)}<small>${esc(u)}</small></div><div class="k">${k}</div></div>`).join("");
+}
+
+function renderNodes(ov) {
+  const dmap = Object.fromEntries((ov.docker.nodes || []).map(d => [d.hostname, d]));
+  $("nodes").innerHTML = ov.inventory_nodes.map(n => {
+    const m = ov.metrics[n.name] || {};
+    const d = dmap[n.name] || {};
+    const c = nodeColor(n);
+    const chip = n.role === "manager"
+      ? `<span class="chip">manager${d.leader ? " · leader" : ""}</span>`
+      : `<span class="chip">${tierName[n.label] || n.label}</span>`;
+    const head = `<div class="top"><div style="flex:1;min-width:0">
+        <div class="name">${esc(n.name)}</div>
+        <div class="sub mono">${esc(n.ip)} · ${esc((m.model || "").replace("Raspberry Pi", "Pi").replace(/ Model B.*/, ""))}</div></div>${chip}</div>`;
+    if (!m.online) {
+      return `<div class="node offline" style="--c:${c}" data-node="${esc(n.name)}">${head}
+        <div class="empty" style="margin:28px 0 18px">监控 agent 无响应（${esc(m.error || "未知")}）· 最后在线 ${ago(m.seen)}</div></div>`;
+    }
+    const memP = 100 * (m.mem.total - m.mem.avail) / m.mem.total;
+    const disks = (m.disks || []).map(dk => {
+      const p = 100 * dk.used / dk.total;
+      const lbl = dk.mount === "/" ? "系统盘" : dk.mount.split("/").pop();
+      return `<div class="meter"><div class="row"><span title="${esc(dk.mount)} (${esc(dk.dev)})">${esc(lbl)}</span><b class="num">${fmtB(dk.used)} / ${fmtB(dk.total)}</b></div><div class="bar ${barCls(p)}"><i style="width:${p.toFixed(1)}%"></i></div></div>`;
+    }).join("");
+    const thr = m.throttled?.now?.length ? `<span class="chip" style="--c:var(--bad)">${esc(m.throttled.now.join("/"))}</span>` : "";
+    const ctrs = (m.containers || []).map(ct => `<div class="ctr"><span class="dot ${ct.state === "running" ? "" : "off"}"></span>
+        <span class="nm mono" title="${esc(ct.name)}">${esc(shortSvc(ct.service || ct.name, ov.cluster.stack))}</span>
+        <span class="st num">${fmtPct(ct.cpu_pct)}% · ${fmtB(ct.mem)}${ct.mem_max ? " / " + fmtB(ct.mem_max) : ""}</span></div>`).join("");
+    const app = n.role === "worker" ? `<span>app :8080 <b style="color:${ov.worker_app_8080[n.name] ? "var(--ok)" : "var(--bad)"}">${ov.worker_app_8080[n.name] ? "通" : "不通"}</b></span>` : "";
+    return `<div class="node" style="--c:${c}" data-node="${esc(n.name)}" title="点击查看 30 分钟趋势">
+      ${head}
+      <div class="body">
+        ${ring(m.cpu_pct, "CPU", m.cpu_cores)}
+        <div class="meters">
+          <div class="meter"><div class="row"><span>内存</span><b class="num">${fmtB(m.mem.total - m.mem.avail)} / ${fmtB(m.mem.total)}</b></div><div class="bar ${barCls(memP)}"><i style="width:${memP.toFixed(1)}%"></i></div></div>
+          ${disks}
+          <div class="meter"><div class="row"><span>温度</span><b class="num ${tempCls(m.temp_c)}">${m.temp_c?.toFixed(1) ?? "–"}°C</b></div><div class="bar ${m.temp_c >= 75 ? "bad" : m.temp_c >= 62 ? "warn" : ""}"><i style="width:${Math.min(100, (m.temp_c || 0) / 85 * 100).toFixed(0)}%"></i></div></div>
+        </div>
+      </div>
+      <div class="spark">${spark(HIST[n.name], c)}</div>
+      <div class="flow num"><span>网络 ↓<b>${fmtRate(m.net?.rx_bps)}</b> ↑<b>${fmtRate(m.net?.tx_bps)}</b></span><span>磁盘 读<b>${fmtRate(m.io?.read_bps)}</b> 写<b>${fmtRate(m.io?.write_bps)}</b></span>${app}<span>负载 <b>${m.load.map(x => x.toFixed(2)).join(" ")}</b></span><span>频率 <b>${m.freq_mhz ?? "–"} MHz</b></span>${thr}</div>
+      <div class="ctrs">${ctrs || `<div class="empty">没有运行中的容器</div>`}</div>
+    </div>`;
   }).join("");
 }
 
-function renderNodes(d, inv, app){
-  const byName = Object.fromEntries(inv.map(n=>[n.name,n]));
-  const nodes = d.nodes || [];
-  if (!nodes.length){ $("#nodes").innerHTML = `<tr><td colspan="8" class="muted">${esc(d.error||"无数据")}</td></tr>`; return; }
-  nodes.sort((a,b)=>a.hostname.localeCompare(b.hostname));
-  $("#nodes").innerHTML = nodes.map(n => {
-    const i = byName[n.hostname] || {};
-    const ok = n.state==="ready" && n.availability==="active";
-    const a = app[n.hostname];
-    return `<tr><td><b>${esc(n.hostname)}</b>${n.leader?` <span class="tag ours">leader</span>`:""}<div class="small muted">ssh ${esc(i.ssh||"")}</div></td>
-      <td>${esc(n.addr||i.ip)}</td><td>${esc(n.role)}</td>
-      <td>${esc(n.labels?.type||"—")}</td>
-      <td><span class="dot ${ok?"ok":"bad"}"></span>${esc(n.state)} / ${esc(n.availability)}</td>
-      <td>${n.cpus} 核 · ${GB(n.mem)} GB</td><td class="small">${esc(n.engine)}</td>
-      <td>${a===undefined?`<span class="muted">—</span>`:a?`<span class="dot ok"></span>可连接`:`<span class="dot bad"></span>不通`}</td></tr>`;
+const ICON = {
+  start: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>',
+  logs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>',
+};
+const ownerChip = { ours: ["我们的", "var(--n-manager)"], others: ["他人的", "var(--warn)"], unknown: ["未确认", "var(--ink-3)"] };
+
+function renderSvcs(ov) {
+  $("svcs").innerHTML = ov.services.map(s => {
+    const st = s.systemd || {};
+    const active = st.ActiveState === "active", failed = st.ActiveState === "failed";
+    const missing = st.LoadState === "not-found";
+    const stateTxt = missing ? "未安装" : active ? (s.port && !s.listening ? "启动中" : "运行中") : failed ? "失败" : "已停止";
+    const [ot, oc] = ownerChip[s.owner] || ownerChip.unknown;
+    const q = s.queue;
+    let slots = "";
+    if (q && q.worker_status) {
+      slots = `<div class="slots" title="采集 worker 槽位 · 队列 ${q.queue_size}">${Object.values(q.worker_status).map(v => `<i class="${v === "idle" ? "" : "busy"}"></i>`).join("")}<span class="num">&nbsp;队列 ${q.queue_size}${q.total_tasks ? " · 累计 " + q.total_tasks : ""}</span></div>`;
+    } else if (q && q.error) slots = `<div class="slots">队列不可达</div>`;
+    else if (st.UnitFileState) slots = `<div class="slots">${st.UnitFileState === "enabled" ? "开机自启" : "不自启"}</div>`;
+    const ours = s.owner === "ours" && !missing;
+    const b = (a, label) => `<button class="act" data-unit="${esc(s.unit)}" data-act="${a}" title="${label}">${ICON[a]}</button>`;
+    const acts = (ours ? (active ? (s.self ? b("restart", "重启界面") : b("restart", "重启") + b("stop", "停止")) : b("start", "启动")) : "")
+      + (missing ? "" : b("logs", "日志"));
+    return `<div class="svc ${active ? "" : "dim"}">
+      <div class="head"><span class="port num ${s.port ? "" : "none"}">${s.port ? s.port : "—"}</span>
+        <span class="chip" style="--c:${oc}">${ot}</span>
+        <span class="state"><span class="sdot ${active ? "on" : failed ? "fail" : ""}"></span>${stateTxt}</span></div>
+      <div><div class="title">${esc(s.title)}</div><div class="unit mono" title="${esc(s.note || s.script || "")}">${esc(s.unit)}</div></div>
+      <div class="foot">${slots}<div class="acts">${acts}</div></div>
+    </div>`;
   }).join("");
 }
 
-function renderSwarm(d){
-  const ss = d.services || [];
-  if (!ss.length){ $("#swarm").innerHTML = `<tr><td colspan="6" class="muted">${esc(d.error||"无服务")}</td></tr>`; return; }
-  $("#swarm").innerHTML = ss.map(s => {
-    const ok = s.running === s.replicas;
-    const tasks = s.tasks.filter(t=>t.desired==="running").concat(s.tasks.filter(t=>t.desired!=="running").slice(0,1))
-      .map(t=>`<div><span class="dot ${t.state==="running"?"ok":t.state==="failed"||t.state==="rejected"?"bad":"warn"}"></span>${esc(t.node)} · ${esc(t.state)} <span class="small muted">${ago(t.since)}</span>${t.err?`<div class="small" style="color:var(--bad)">${esc(t.err)}</div>`:""}</div>`).join("");
-    return `<tr><td><b>${esc(s.name)}</b></td>
-      <td><span class="dot ${ok?"ok":"bad"}"></span>${s.running}/${s.replicas??"global"}</td>
-      <td>${tasks}</td>
-      <td class="small">${s.constraints.map(c=>`<div><code>${esc(c)}</code></div>`).join("")}</td>
-      <td class="small">${s.cpu_limit?s.cpu_limit+" 核":""}${s.mem_limit?" · "+GB(s.mem_limit)+" GB":""}</td>
-      <td class="small"><code>${esc(s.image)}</code></td></tr>`;
+function renderStack(ov) {
+  const ds = ov.docker.services || [];
+  if (!ds.length) { $("stack").innerHTML = `<div class="empty">${esc(ov.docker.error || "没有 swarm 服务")}</div>`; return; }
+  const color = Object.fromEntries(ov.inventory_nodes.map(n => [n.name, nodeColor(n)]));
+  $("stack").innerHTML = ds.map(s => {
+    const running = s.tasks.filter(t => t.state === "running");
+    const reps = s.replicas ?? running.length;
+    const dots = Array.from({ length: Math.max(reps, running.length) }, (_, i) => `<i class="${i < s.running ? "up" : ""}"></i>`).join("");
+    const where = [...new Set(running.map(t => t.node))].map(nm => `<span class="chip" style="--c:${color[nm] || "var(--ink-3)"}">${esc(nm)}</span>`).join("");
+    const lim = [s.cpu_limit ? `${s.cpu_limit} CPU` : "", s.mem_limit ? fmtB(s.mem_limit) : ""].filter(Boolean).join(" · ");
+    const errs = s.tasks.filter(t => t.err && t.desired === "running").slice(0, 1).map(t => `<div class="err">${esc(t.node)}: ${esc(t.err)}</div>`).join("");
+    return `<div class="ss">
+      <div class="nm">${esc(shortSvc(s.name, ov.cluster.stack))}</div>
+      <div class="img mono">${esc(s.image)}</div>
+      <div class="reps">${dots}<span class="num">${s.running}/${reps} 运行</span></div>
+      <div class="meta">${where}${lim ? `<span class="chip muted">限额 ${esc(lim)}</span>` : ""}${s.constraints.map(c => `<span class="chip muted mono">${esc(c.replace("node.labels.", ""))}</span>`).join("")}</div>
+      ${errs}
+    </div>`;
   }).join("");
 }
 
-let busy = false;
-async function load(){
-  if (busy) return; busy = true;
-  try{
-    const r = await fetch("/api/overview"); if (!r.ok) throw new Error("HTTP "+r.status);
-    const d = await r.json();
-    $("#err").textContent = "";
-    $("#sub").textContent = `${d.host.hostname} · ${d.cluster.manager_ip} · 更新于 ${new Date(d.time*1000).toLocaleTimeString()}`;
-    $("#stackname").textContent = "· " + (d.cluster.stack||"");
-    renderHost(d.host); renderServices(d.services);
-    renderNodes(d.docker, d.inventory_nodes, d.worker_app_8080); renderSwarm(d.docker);
-  }catch(e){ $("#err").textContent = "刷新失败：" + e.message; }
-  finally{ busy = false; }
+function renderDrawerNode() {
+  if (!drawerNode || !OV) return;
+  const n = OV.inventory_nodes.find(x => x.name === drawerNode);
+  const m = OV.metrics[drawerNode] || {};
+  const h = HIST[drawerNode] || Object.fromEntries(["t", ...SERIES].map(k => [k, []]));
+  const c = nodeColor(n);
+  $("dTitle").textContent = n.name;
+  $("dSub").textContent = `${n.ip} · ${m.model || ""} · 运行 ${fmtDur(m.uptime_s)}`;
+  const kv = [
+    ["CPU", `${fmtPct(m.cpu_pct)}% · ${m.cpus || "–"} 核`],
+    ["频率", `${m.freq_mhz ?? "–"} MHz`],
+    ["温度", `${m.temp_c?.toFixed(1) ?? "–"} °C`],
+    ["负载", (m.load || []).map(x => x.toFixed(2)).join(" ")],
+    ["内存可用", fmtB(m.mem?.avail)],
+    ["Swap", m.swap?.total ? `${fmtB(m.swap.total - m.swap.free)} / ${fmtB(m.swap.total)}` : "无"],
+    ["降频记录", m.throttled?.since_boot?.length ? m.throttled.since_boot.join("/") : "无"],
+    ["网卡", m.net?.iface || "–"],
+  ].map(([k, v]) => `<div><span>${k}</span><b class="num">${esc(v)}</b></div>`).join("");
+  $("dBody").innerHTML = `<div class="kv">${kv}</div>`
+    + bigChart("CPU", [{ v: h.cpu, c }], { max: 100, area: true, fmt: v => fmtPct(v) + "%" })
+    + bigChart("内存", [{ v: h.mem, c: "var(--info)" }], { max: 100, area: true, fmt: v => fmtPct(v) + "%" })
+    + bigChart("温度", [{ v: h.temp, c: "var(--warn)" }], { max: 90, fmt: v => v == null ? "–" : v.toFixed(1) + "°C" })
+    + bigChart("网络", [{ v: h.rx, c, name: "下行" }, { v: h.tx, c: "var(--ink-3)", name: "上行", dash: true }], { min: 1024, fmt: fmtRate })
+    + bigChart("磁盘 IO", [{ v: h.dr, c: "var(--info)", name: "读" }, { v: h.dw, c: "var(--bad)", name: "写", dash: true }], { min: 1024, fmt: fmtRate });
 }
 
-let logUnit = null;
-async function loadLog(){
-  $("#logtext").textContent = "加载中…";
-  const r = await fetch(`/api/unit/${encodeURIComponent(logUnit)}/logs?n=${$("#logn").value}`);
-  const d = await r.json(); const pre = $("#logtext");
-  pre.textContent = d.text || d.msg || "(空)"; pre.scrollTop = pre.scrollHeight;
+function render() {
+  if (!OV) return;
+  $("stackName").textContent = "· " + (OV.cluster.stack || "");
+  $("pulse").classList.remove("stale");
+  $("updated").textContent = "实时 · " + new Date(OV.time * 1000).toLocaleTimeString();
+  renderHero(OV);
+  renderNodes(OV);
+  renderSvcs(OV);
+  renderStack(OV);
+  if (drawerNode) renderDrawerNode();
 }
 
-document.addEventListener("click", async e => {
-  const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.log){ logUnit = b.dataset.log; $("#logtitle").textContent = logUnit; $("#logdlg").showModal(); loadLog(); }
-  if (b.dataset.act){
-    const {act, unit} = b.dataset;
-    const zh = {start:"启动", stop:"停止", restart:"重启"}[act];
-    if (!confirm(`确定${zh} ${unit}？`)) return;
-    b.disabled = true;
-    try{
-      const r = await fetch(`/api/unit/${encodeURIComponent(unit)}/${act}`, {method:"POST"});
-      const d = await r.json(); toast((d.ok?"✓ ":"✗ ") + zh + " " + unit + (d.ok ? "" : "：" + d.msg));
-    }catch(err){ toast("✗ " + err.message); }
-    setTimeout(load, 1200);
+// ---------------------------------------------------------------- drawer
+function openDrawer() { $("drawer").classList.add("open"); $("scrim").classList.add("open"); $("drawer").setAttribute("aria-hidden", "false"); }
+function closeDrawer() {
+  $("drawer").classList.remove("open"); $("scrim").classList.remove("open"); $("drawer").setAttribute("aria-hidden", "true");
+  drawerNode = null;
+  if (location.hash) history.replaceState(null, "", location.pathname);
+}
+$("dClose").onclick = closeDrawer;
+$("scrim").onclick = closeDrawer;
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+$("nodes").addEventListener("click", e => {
+  const el = e.target.closest(".node");
+  if (!el) return;
+  drawerNode = el.dataset.node;
+  history.replaceState(null, "", "#node=" + encodeURIComponent(drawerNode));
+  renderDrawerNode();
+  openDrawer();
+});
+
+async function showLogs(unit) {
+  drawerNode = null;
+  $("dTitle").textContent = unit;
+  $("dSub").textContent = "journalctl · 最近 300 行";
+  $("dBody").innerHTML = `<pre>读取中…</pre>`;
+  openDrawer();
+  try {
+    const j = await getJSON(`/api/unit/${encodeURIComponent(unit)}/logs?n=300`);
+    $("dBody").innerHTML = `<pre class="mono">${esc(j.text || j.msg || "(空)")}</pre>`;
+    $("dBody").scrollTop = $("dBody").scrollHeight;
+  } catch (e) { $("dBody").innerHTML = `<pre>读取失败：${esc(e.message)}</pre>`; }
+}
+
+// ---------------------------------------------------------------- actions
+let toastT;
+function toast(msg, bad) {
+  const t = $("toast"); t.textContent = msg; t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = "toast", 3200);
+}
+const armed = new Map();             // "unit/act" -> timeout：停止/重启需要点两次
+$("svcs").addEventListener("click", async e => {
+  const b = e.target.closest(".act");
+  if (!b) return;
+  const { unit, act } = b.dataset;
+  if (act === "logs") return showLogs(unit);
+  const key = unit + "/" + act;
+  if ((act === "stop" || act === "restart") && !armed.has(key)) {
+    b.classList.add("armed");
+    b.innerHTML = ICON[act] + (act === "stop" ? "再点停止" : "再点重启");
+    armed.set(key, setTimeout(() => { armed.delete(key); render(); }, 3000));
+    return;
+  }
+  clearTimeout(armed.get(key)); armed.delete(key);
+  b.disabled = true;
+  try {
+    const j = await getJSON(`/api/unit/${encodeURIComponent(unit)}/${act}`, { method: "POST" });
+    toast(j.ok ? `${unit}：${{ start: "已启动", stop: "已停止", restart: "已重启" }[act]}` : `${unit}：${j.msg}`, !j.ok);
+  } catch (err) { toast(`${unit}：请求失败 ${err.message}`, true); }
+  setTimeout(tick, 800);
+});
+
+// ---------------------------------------------------------------- go
+setInterval(() => {
+  if (lastOk && Date.now() - lastOk > POLL_MS * 3) { $("pulse").classList.add("stale"); $("updated").textContent = "数据已过期 · " + ago(lastOk / 1000); }
+}, 1000);
+loadHistory().then(tick).then(() => {
+  const m = location.hash.match(/^#node=(.+)$/);       // #node=worker-01 直接打开该节点趋势
+  if (m && OV && OV.inventory_nodes.some(n => n.name === decodeURIComponent(m[1]))) {
+    drawerNode = decodeURIComponent(m[1]); renderDrawerNode(); openDrawer();
   }
 });
-$("#logclose").onclick = () => $("#logdlg").close();
-$("#logreload").onclick = loadLog; $("#logn").onchange = loadLog;
-$("#refresh").onclick = load;
-setInterval(() => { if ($("#auto").checked && !document.hidden) load(); }, 5000);
-load();
+setInterval(() => { if (!armed.size) tick(); }, POLL_MS);
 </script>
 </body>
 </html>
