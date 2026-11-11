@@ -21,3 +21,6 @@ envs/*.env
 # 只留在本机：旧代码（含明文配置）、集群状态快照（节点 ID / IP）
 legacy/
 ops/local/snapshots/
+
+# 交接用的密钥、env 打包（含私钥，绝不进 git）
+secrets/

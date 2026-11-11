@@ -76,7 +76,7 @@ unit = "collect_8081.service"
 owner = "user01"
 title = "manager_hmsw_v2（RL_MOTS / Ablation / algor_set）"
 script = "~/appv8/manager/manager_hmsw_v2.py"
-note = "user01使用，勿动。仍用 ~/apps/manager_server/.venv + ~/appv8"
+note = "user01使用，勿动。仍用 ~/apps/manager_server/.venv + ~/appv8。代码已与 host/manager/manager_hmsw_v2.py 一致，unit 模板 ops/cluster/systemd/collect_8081.service 已备好（deploy 不会安装）；切换需 user01 同意"
 
 [[service]]
 port = 8082
@@ -93,9 +93,10 @@ port = 8083
 unit = "collect_8083.service"
 owner = "soar009"
 title = "XGB 数据采集 · Least Time"
-script = "~/appv8/manager/manager_xgbdata_collecter_lstt.py"
+script = "host/manager/manager_xgbdata_collecter_lstt.py"
+managed = true
 status_path = "/queue/status"
-note = "2026-11-04 确认归我们。unit 不在本仓库（未 managed），仍用 ~/apps/manager_server/.venv + ~/appv8"
+note = "2026-11-11 从 ~/appv8 迁入本仓库（代码与原版一致，仅 SSH 账号改读 .env）"
 
 [[service]]
 port = 8084

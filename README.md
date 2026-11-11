@@ -78,6 +78,7 @@ flowchart LR
 | `inventory.toml`       | 开发机和 manager 共用        | 节点、服务、端口归属的登记表，运维界面和部署脚本都读它                                             |
 | `data/`                | —                            | 实验日志和数据（不进 git）                                                                         |
 | `legacy/`              | —                            | 旧版本代码和数据，含旧的明文配置，只留在本机，不进 git                                             |
+| `secrets/`             | —                            | 交接给成员的访问包（私钥、ssh 配置、env 打成的 zip），只留在本机，不进 git，也不会被部署           |
 
 **规则：除 `ops/local/`、`clients/`、`envs/`、`data/`、`legacy/` 外，其余文件都会被部署到 manager 上。**
 
@@ -230,6 +231,20 @@ IP、ssh 别名、账号密码和路径等，都放在本机的 `envs/<环境名
 | `DOCKER_IMAGE` `STACK_NAME` `STACK_COMPOSE` `REBUILD_COMPOSE` `DOCKER_BUILD_DIR` | 镜像和 stack 相关                                       |
 | `GRB_LICENSE_FILE`                                                               | 8080 用的 gurobi license                                |
 | `OPS_PORT` `AGENT_PORT`                                                          | 运维界面和 agent 的端口                                 |
+| `MANAGER_MAC`、`WORKER{1,2,3}_MAC`、`GATEWAY_IP`                                 | 各节点 eth0 的 MAC、做地址保留的路由器，见下一节        |
+
+### 节点 IP 与路由器
+
+节点**没有配置静态 IP**，4 台都通过 DHCP 拿地址（eth0）。IP 能固定不变，靠的是路由器（`$GATEWAY_IP`）上按 MAC 做的 **DHCP 地址保留**。env 文件、ssh 别名、swarm 节点地址、调度器访问 worker 用的都是这几个 IP，所以地址保留一旦失效，部署会连不上，swarm 节点也会掉线。
+
+各节点的 MAC 记在 `envs/<环境名>.env` 的 `*_MAC` 里，和路由器上的保留列表对照着看。路由器的后台密码和配置导出**不要放进仓库**。
+
+| 情况                             | 要做的事                                                                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 换了树莓派、网卡，或者重刷了系统 | 在节点上执行 `cat /sys/class/net/eth0/address` 查新 MAC → 在路由器上把新 MAC 绑定到原来的 IP → 更新 env 里的 `*_MAC` → 重启节点，让它重新获取 IP |
+| 路由器被重置或者更换             | 按 env 里的 `*_MAC`、`*_IP` 重新添加 4 条地址保留                                                                                                              |
+| 某个节点的 IP 已经变了           | 先改回原 IP（按上面两行处理）。如果确实要换 IP：修改 `envs/*.env` 和每个人的 `~/.ssh/config`，执行 `deploy-host.sh <环境> --restart` 和 `deploy-agents.sh`；manager 的 IP 变了还要执行 `rebuild-swarm.sh` |
+| 新增节点                         | 先在路由器上做好地址保留，再加入 swarm，在 env 和 `inventory.toml` 里登记                                                                                       |
 
 ## 修改代码的流程
 
@@ -296,7 +311,7 @@ ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括
 脚本**不会**做这些事：
 
 - 不改采集器的开机自启状态。需要时自己在 manager 上执行 `systemctl enable` 或 `disable`。
-- 不碰 `~/appv8`、`~/apps` 和它们的 venv，8081 和 8083 还在用。
+- 不碰 `~/appv8`、`~/apps` 和它们的 venv，8081 还在用。
 
 ### 集群内运维
 
@@ -346,7 +361,7 @@ ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
 | 8080           | `collect_8080`    | soar009 | `manager_hmsw.py`（DQN / direct / sd_min / min_min / RR）    | 否，需要时手动启动 |
 | 8081           | `collect_8081`    | user01  | `~/appv8/manager/manager_hmsw_v2.py`，user01在用，**不要动** | 否                 |
 | 8082           | `collect_8082_rr` | soar009 | XGB 数据采集 · Round Robin                                   | 是                 |
-| 8083           | `collect_8083`    | soar009 | XGB 数据采集 · Least Time，代码在 `~/appv8`，还没迁进本仓库  | 是                 |
+| 8083           | `collect_8083`    | soar009 | XGB 数据采集 · Least Time `manager_xgbdata_collecter_lstt.py` | 是                 |
 | 8084           | `collect_8084`    | soar009 | XGB 数据采集 · handle_hdd v2（RR）                           | 是                 |
 | 8080（worker） | swarm 服务        | soar009 | worker 容器 `image/worker-app/app.py`                        | 由 swarm 管理      |
 
@@ -383,12 +398,15 @@ Python 版本锁定为 3.11，和 manager 系统的 Python 3.11.2 保持一致�
 | 部署后运维界面打不开                        | 在 manager 上看日志：`journalctl -u swarm-lb-ops -n 50`                                             |
 | 采集器连不上 worker 的 SSH                  | 检查 env 里的 `NODE_SSH_USER`、`NODE_SSH_PASSWORD`，改完后重新部署并加 `--restart`                  |
 | `uv sync --frozen` 报错                     | `pyproject.toml` 改了但没执行 `uv lock`，或者 `uv.lock` 没提交                                      |
+| 突然 ssh 超时、运维界面上某个节点离线       | 先 `ping` 该节点的 IP；如果不通，到路由器的 DHCP 客户端列表里按 MAC 找它现在的 IP，见[节点 IP 与路由器](#节点-ip-与路由器) |
 | 客户端提示 `未找到 MANAGER_IP`              | 设置 `SWARM_ENV=lab`；在user01机器上，也可以在 `clients/load-client/.env` 里写一行 `MANAGER_IP=...` |
 
 ## 待办与注意
 
-- **8081 和 8083 的代码不在本仓库部署范围内。** 它们在 manager 的 `~/appv8`，使用 `~/apps/manager_server/.venv`。8083 已经确认是我们的，等待迁进 `host/`。`host/manager/` 里的 `manager_hmsw_v2.py` 和 `manager_xgbdata_collecter_lstt.py` 是它们的副本，实际运行的不是这两份。
+- **8083 已迁入本仓库（2026-11-11）**，由 `deploy-host.sh` 安装 unit。原来 `~/appv8` 下的代码和本仓库一致，只是本仓库版本的 SSH 账号改从 `.env` 读取。
+- **8081 仍在 `~/appv8` 运行**（user01 的服务），使用 `~/apps/manager_server/.venv`。`host/manager/manager_hmsw_v2.py` 已和线上代码一致，依赖版本也一样，unit 模板 `ops/cluster/systemd/collect_8081.service` 已经备好，但部署脚本不会安装它。切换需要 user01 同意；切换之前，8081 的代码改动请在本仓库提交，再由 user01 同步到 `~/appv8`，不要只在 manager 上改。
 - **镜像和 stack 脚本仍然指向旧目录。** `build-image.sh`、`stack-start.sh` 和 `rebuild-swarm.sh` 读取 env 里的 `DOCKER_BUILD_DIR`、`STACK_COMPOSE` 和 `REBUILD_COMPOSE`，目前指向 `~/appv8` 和 `~/apps` 下的旧文件。要改用本仓库的 `image/`，把它们改成 `$REMOTE_DIR/image/...` 即可。
 - **有待清理的重复代码**：`hdd_config.json` 有 3 份；`host/manager/tasks/tasks/` 和 `tasks/` 重复；采集器有多个版本并存。
 - **安全**：2026-11-04 重写过 git 历史，去掉了明文密码和 IP。但仓库公开期间可能已经被别人拿到，建议修改各节点 `pi` 用户的密码，并同步更新 env 文件。
+- **路由器**：还没有确认路由器上确实做了 4 条 DHCP 地址保留，也还没有记录谁有后台权限。确认后在这里写上负责人（不写密码）。
 - worker 节点用 `swarm_ed25519` 无法免密登录，worker 上的文件没有收集。
