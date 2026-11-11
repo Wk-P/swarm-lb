@@ -23,7 +23,7 @@ ENVS_DIR = REPO_ROOT / "envs"
 # Windows 控制台默认不是 UTF-8，中文输出会乱码或报错
 for _s in (sys.stdout, sys.stderr):
     try:
-        _s.reconfigure(encoding="utf-8")
+        _s.reconfigure(encoding="utf-8", line_buffering=True)   # 按行刷新，和 ssh 的输出保持先后顺序
     except Exception:
         pass
 

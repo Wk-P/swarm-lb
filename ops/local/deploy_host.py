@@ -114,6 +114,10 @@ if [ -f .deployed-files ]; then
     [ -f "$f" ] && { rm -f -- "$f"; n=$((n+1)); }
   done < <(comm -23 <(sort .deployed-files) <(sort .deployed-files.new))
   echo "  删除 $n 个旧文件"
+  # 代码已经删光、只剩 __pycache__ 的目录（改名后的旧包），连缓存一起删
+  find . -mindepth 2 -type d -name __pycache__ -not -path './.venv/*' | while read -r c; do
+    p=$(dirname "$c"); ls "$p"/*.py >/dev/null 2>&1 || { rm -rf -- "$c"; echo "  删除旧缓存 $c"; }
+  done
   find . -mindepth 1 -type d -empty -not -path './.venv/*' -not -path './.git/*' -print -delete | sed 's/^/  删除空目录 /'
 else
   echo "  首次记录文件清单，不删除任何文件"
