@@ -2,15 +2,15 @@
 # 运维界面 (ops/cluster/ui/) 和部署脚本 (ops/local/deploy-host.sh) 都读这个文件。
 # ${VAR} 是环境参数（envs/<环境名>.env，部署后为 manager 上的 .env），运维界面加载时展开。
 #
-# owner:
-#   ours    soar009。运维界面可启停/重启；deploy 脚本会安装其 unit
-#   others  别人的。只读展示，任何脚本都不得修改其 unit / venv / 代码目录
-#   unknown 归属未确认。只读展示
+# owner：服务的使用者/负责人，直接写人名（如 "soar009"、"user01"），未确认写 "unknown"。
+#   owner == [cluster].maintainer 的 unit：运维界面可启停/重启；deploy 脚本会安装其 unit（还需 managed = true）
+#   其他 owner：只读展示，任何脚本都不得修改其 unit / venv / 代码目录
 
 [cluster]
 stack = "collect_data_stack"
 image = "${DOCKER_IMAGE}"
 manager_ip = "${MANAGER_IP}"
+maintainer = "soar009"    # 本仓库的维护者：只有 owner 等于它的服务才允许运维界面操作、deploy 脚本安装
 agent_port = 9100         # 每个节点上的监控 agent（ops/cluster/agent/node_agent.py，ops/local/deploy-agents.sh 部署）
 
 [[node]]
@@ -46,7 +46,7 @@ label = "high"
 [[service]]
 port = 5000
 unit = "swarm-lb-ops.service"
-owner = "ours"
+owner = "soar009"
 title = "运维管理界面"
 script = "ops/cluster/ui/server.py"
 managed = true            # unit 模板在 ops/cluster/systemd/，deploy-host.sh 安装
@@ -55,7 +55,7 @@ self = true               # 界面自身：不提供"停止"按钮
 [[service]]
 port = 9100
 unit = "swarm-lb-agent.service"
-owner = "ours"
+owner = "soar009"
 title = "节点监控 agent"
 script = "ops/cluster/agent/node_agent.py"
 note = "所有节点都有一份（~/swarm-lb-agent/），由 ops/local/deploy-agents.sh 部署；这里只列 manager 本机这份"
@@ -63,7 +63,7 @@ note = "所有节点都有一份（~/swarm-lb-agent/），由 ops/local/deploy-a
 [[service]]
 port = 8080
 unit = "collect_8080.service"
-owner = "ours"
+owner = "soar009"
 title = "v8 manager_hmsw（DQN / direct / sd_min / min_min / RR）"
 script = "host/manager/manager_hmsw.py"
 managed = true
@@ -73,7 +73,7 @@ note = "开机不自启。manager_hmsw8d.py / manager_hmsw_collect.py 也写死 
 [[service]]
 port = 8081
 unit = "collect_8081.service"
-owner = "others"
+owner = "user01"
 title = "manager_hmsw_v2（RL_MOTS / Ablation / algor_set）"
 script = "~/appv8/manager/manager_hmsw_v2.py"
 note = "user01使用，勿动。仍用 ~/apps/manager_server/.venv + ~/appv8"
@@ -81,7 +81,7 @@ note = "user01使用，勿动。仍用 ~/apps/manager_server/.venv + ~/appv8"
 [[service]]
 port = 8082
 unit = "collect_8082_rr.service"
-owner = "ours"
+owner = "soar009"
 title = "v8 XGB 数据采集 · Round Robin"
 script = "host/manager/manager_xgbdata_collecter_rr.py"
 managed = true
@@ -91,7 +91,7 @@ note = "manager_xgbdata_collecter.py 也写死 8082，不能同时运行"
 [[service]]
 port = 8083
 unit = "collect_8083.service"
-owner = "ours"
+owner = "soar009"
 title = "XGB 数据采集 · Least Time"
 script = "~/appv8/manager/manager_xgbdata_collecter_lstt.py"
 status_path = "/queue/status"
@@ -100,7 +100,7 @@ note = "2026-11-04 确认归我们。unit 不在本仓库（未 managed），仍
 [[service]]
 port = 8084
 unit = "collect_8084.service"
-owner = "ours"
+owner = "soar009"
 title = "v8 XGB 数据采集 · handle_hdd v2（RR）"
 script = "host/manager/manager_xgbdata_collector_handle_hdd_v2.py"
 managed = true

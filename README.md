@@ -17,18 +17,36 @@
 
 ## 整体结构
 
-```
-开发机 / user01机器                         集群（本地 192.x 网段，模拟远程环境）
-┌───────────────────────┐     ssh     ┌──────────────────────────────────────────────┐
-│ ops/local/  部署、运维 │ ──────────▶ │ manager（宿主机，systemd）                   │
-│ clients/    发请求     │ ── HTTP ──▶ │   host/manager/     调度器、采集器 :8080-8084 │
-│ envs/       环境参数   │             │   ops/cluster/ui/   运维界面 :5000            │
-└───────────────────────┘             │   ops/cluster/bin/  集群内运维脚本            │
-          │ git push                   │ 每个节点                                      │
-          ▼                            │   ops/cluster/agent/ 监控 agent :9100         │
-       GitHub ──── 部署只用已推送的提交 │ worker-01/02/03（swarm 容器）                 │
-                                       │   image/worker-app/  docker 镜像 :8080        │
-                                       └──────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph dev["开发机 / user01 机器（同网段任意机器）"]
+    L["ops/local/<br>部署、运维"]
+    C["clients/<br>发请求"]
+    E["envs/<br>环境参数（不进 git）"]
+    BR["浏览器"]
+  end
+
+  GH[("GitHub<br>部署只用已推送的提交")]
+
+  subgraph cluster["集群（本地 192.168.1.x 网段，模拟远程环境）"]
+    subgraph mgr["manager（宿主机，systemd）"]
+      H["host/manager/<br>调度器、采集器 :8080-8084"]
+      UI["ops/cluster/ui/<br>运维界面 :5000"]
+      BIN["ops/cluster/bin/<br>集群内运维脚本"]
+    end
+    subgraph wk["worker-01 / 02 / 03（swarm 容器）"]
+      W["image/worker-app/<br>app_w1 / w2 / w3 :8080"]
+    end
+    AG["ops/cluster/agent/<br>每个节点的监控 agent :9100"]
+  end
+
+  L -- "git push" --> GH
+  L -- "ssh 部署、执行脚本" --> mgr
+  E -. "部署时同步为 .env" .-> mgr
+  C -- "HTTP 请求" --> H
+  H -- "分发任务" --> W
+  BR -- "HTTP" --> UI
+  UI -. "读取状态" .-> AG
 ```
 
 | 节点      | IP            | swarm label |
@@ -65,29 +83,134 @@
 
 ## 首次使用
 
-需要 Windows 上的 Git Bash（或者 Linux、macOS 终端），以及 [uv](https://docs.astral.sh/uv/)。
+同一个 192.168.1.x 网段里的任何一台机器，按下面的步骤配置后，都能像现有的开发机一样运维：部署、执行集群内脚本、发请求。GitHub 只用来同步代码；运维靠的是本机的 env 文件和 ssh 密钥，这两样都不进 git。
 
-```bash
-git clone https://github.com/Wk-P/swarm-lb.git && cd swarm-lb
-cp envs/example.env envs/lab.env     # 找已有成员要真实参数填进去
-uv sync                              # 安装开发机依赖
+> 只想**查看状态、启停采集器、看日志**的话，什么都不用装，浏览器打开 `http://<manager IP>:5000/` 就行（运维界面，在同一网段内都能访问）。
+
+```mermaid
+flowchart TD
+  A["同网段的新机器"] --> B{"只需要查看状态、<br>启停采集器？"}
+  B -- 是 --> UI["浏览器打开<br>http://&lt;manager IP&gt;:5000/"]
+  B -- 否 --> C["2. clone 仓库、uv sync"]
+  C --> D["3. 私下拿到 envs/lab.env"]
+  D --> E["4. 生成自己的 ssh 密钥"]
+  E --> F{"知道 pi 的密码？"}
+  F -- 是 --> G["ssh-copy-id 到 4 个节点"]
+  F -- 否 --> H["把公钥交给已有成员追加"]
+  G --> I["5. 配置 ~/.ssh/config 别名"]
+  H --> I
+  I --> J["6. 验证：免密登录、sudo、<br>remote.sh、check-stack.sh"]
+  J --> K["7. git pull，按修改代码的流程部署"]
 ```
 
-在 `~/.ssh/config` 里配置各节点的 ssh 别名，名字要和 `envs/lab.env` 里的 `MANAGER_SSH`、`WORKER*_SSH` 一致，并且要能免密登录：
+### 1. 前提
+
+| 项目       | 要求                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| 网络       | 本机在集群所在的 192.168.1.x 网段，能 `ping` 通 manager 和 3 台 worker                       |
+| GitHub     | 能 clone 本仓库；**要部署的话还需要 push 权限**（找仓库所有者加为 collaborator）             |
+| 工具       | Windows 用 [Git Bash](https://git-scm.com/download/win)（Linux、macOS 用自带终端），加上 [uv](https://docs.astral.sh/uv/) |
+| 已有成员   | 需要一位已有成员提供 `envs/lab.env`，并协助把你的公钥加到各节点上（或者告诉你 `pi` 的密码） |
+
+下面的命令都在 Git Bash 里执行。Windows 上 Git Bash 的 `~` 就是 `C:\Users\<你的用户名>`。
+
+### 2. 获取代码、安装依赖
+
+```bash
+git config --global user.name  "<你的名字>"      # 部署记录 .deployed-by 里会显示
+git config --global user.email "<你的邮箱>"
+git clone https://github.com/Wk-P/swarm-lb.git && cd swarm-lb
+uv sync                                         # 安装开发机依赖
+```
+
+### 3. 放置环境参数 `envs/lab.env`
+
+向已有成员要一份 `lab.env`，放到 `envs/lab.env`。这个文件里有 IP 和密码，**要私下传**（比如当面拷贝或者用内网共享），不要通过 git、issue 或者公开的群聊发送。`envs/*.env` 已在 `.gitignore` 里，只有 `example.env` 会进 git。
+
+拿不到现成文件时，可以从模板复制再逐项填写：`cp envs/example.env envs/lab.env`。每个变量的含义见[环境参数](#环境参数)。
+
+```bash
+grep -E '_SSH=|_IP=' envs/lab.env     # 记下 4 个节点的 ssh 别名和 IP，下一步要用
+```
+
+### 4. 生成自己的 ssh 密钥，并加到 4 个节点
+
+**每人用自己的密钥，不要拷贝别人的私钥。** 这样以后有人不再参与时，只删掉他那一行公钥就行。
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/swarm_lb_ed25519 -C "<你的名字>@<机器名>"   # 可以直接回车，不设密码短语
+```
+
+把公钥加到 manager 和 3 台 worker（`pi` 账号）上，两种方式任选一种：
+
+- **知道 `pi` 的密码**：对每个节点执行一次，按提示输入密码。
+  ```bash
+  for ip in <manager IP> <worker1 IP> <worker2 IP> <worker3 IP>; do
+    ssh-copy-id -i ~/.ssh/swarm_lb_ed25519.pub pi@$ip
+  done
+  ```
+- **不知道密码**：把 `~/.ssh/swarm_lb_ed25519.pub` 的内容（一行文本，可以公开）发给已有成员，由对方追加到 4 个节点的 `~pi/.ssh/authorized_keys`。
+  ```bash
+  # 已有成员执行，<公钥> 换成整行内容
+  for h in Manager-Node Worker-Node-1 Worker-Node-2 Worker-Node-3; do
+    ssh $h 'cat >> ~/.ssh/authorized_keys' <<< '<公钥>'
+  done
+  ```
+
+### 5. 配置 ssh 别名 `~/.ssh/config`
+
+每个节点写一段。**`Host` 后面的名字必须和 `envs/lab.env` 里的 `MANAGER_SSH`、`WORKER1_SSH`…`WORKER3_SSH` 完全一致**，脚本是按这些别名连接的。下面以 lab 环境的别名为例：
 
 ```
 Host Manager-Node
     HostName <manager IP>
     User pi
-    IdentityFile ~/.ssh/<你的私钥>
+    IdentityFile ~/.ssh/swarm_lb_ed25519
+    IdentitiesOnly yes
+
+Host Worker-Node-1
+    HostName <worker1 IP>
+    User pi
+    IdentityFile ~/.ssh/swarm_lb_ed25519
+    IdentitiesOnly yes
+
+# Worker-Node-2、Worker-Node-3 同上，只改 Host 和 HostName
 ```
 
-检查环境是否配好：
+### 6. 验证
 
 ```bash
-ops/local/remote.sh lab              # 能列出 ops/cluster/bin/ 下的脚本，说明环境参数没问题
-ssh Manager-Node 'sudo -n true' && echo OK   # 部署需要 manager 上的免密 sudo
+# 4 个节点都能免密登录（第一次连接会问是否信任主机指纹，输入 yes）
+for h in Manager-Node Worker-Node-1 Worker-Node-2 Worker-Node-3; do
+  ssh -o BatchMode=yes $h hostname || echo "!! $h 连不上"
+done
+
+ssh Manager-Node 'sudo -n true' && echo "sudo OK"   # 部署需要 manager 上的免密 sudo（pi 账号已配置）
+ops/local/remote.sh lab                             # 能列出 ops/cluster/bin/ 下的脚本，说明 env 文件没问题
+ops/local/remote.sh lab check-stack.sh              # 能看到 collect_data_stack 的 3 个服务
 ```
+
+全部通过后，打开 `http://<manager IP>:5000/`，确认能看到运维界面。
+
+### 7. 第一次部署前
+
+先不要急着部署。执行 `git pull`，然后看一眼运维界面页头的提交号，确认和你本地的 HEAD 一致或者是它的祖先。之后按[修改代码的流程](#修改代码的流程)操作。部署前的检查会挡住"覆盖别人部署"的情况，详见[多人协作](#多人协作)。
+
+### 有人不再参与时
+
+1. 在 4 个节点的 `~pi/.ssh/authorized_keys` 里删掉他那一行公钥（行尾的注释就是生成时 `-C` 写的 `<名字>@<机器名>`）：
+   ```bash
+   for h in Manager-Node Worker-Node-1 Worker-Node-2 Worker-Node-3; do
+     ssh $h "sed -i '/<名字>@<机器名>\$/d' ~/.ssh/authorized_keys"
+   done
+   ```
+2. 在 GitHub 上移除他的 collaborator 权限。
+3. 他手里有 `lab.env`，里面有 `NODE_SSH_PASSWORD` 等密码。需要的话修改这些密码，更新自己的 env 文件，执行 `deploy-host.sh lab --restart`，并通知其他成员同步修改。
+
+### 不建议的做法
+
+- **共用一把私钥**：没法单独撤销某个人的权限，也查不出是谁部署的。
+- **用 GitHub Actions 自动部署**：可以在网段内装 self-hosted runner 实现"push 即部署"，但这样 env 文件和 ssh 密钥就要放进 runner 或 GitHub Secrets 里，暴露面更大。现在的手动部署已经有部署前检查和部署记录，暂时不需要。
 
 ## 环境参数
 
@@ -109,6 +232,22 @@ IP、ssh 别名、账号密码和路径等，都放在本机的 `envs/<环境名
 | `OPS_PORT` `AGENT_PORT`                                                          | 运维界面和 agent 的端口                                 |
 
 ## 修改代码的流程
+
+```mermaid
+flowchart TD
+  P["git pull"] --> M["本机修改、自测"] --> CM["git commit"] --> PS["git push"] --> D["ops/local/deploy-host.sh lab"]
+  D --> K1{"工作区干净？"}
+  K1 -- 否 --> X1["拒绝：先提交<br>（临时调试可加 --force）"]
+  K1 -- 是 --> K2{"HEAD 已推送到 origin？"}
+  K2 -- 否 --> X2["拒绝：git push"]
+  K2 -- 是 --> K3{"manager 上已部署的提交<br>在 origin 上？"}
+  K3 -- 否 --> X3["拒绝：让部署人推送<br>不要用 --force 覆盖"]
+  K3 -- 是 --> K4{"它是 HEAD 的祖先？"}
+  K4 -- 否 --> X4["拒绝：git pull 合并后再部署"]
+  K4 -- 是 --> S["同步代码和 .env → 清理旧文件 → uv sync<br>→ 安装 unit、重启运维界面"]
+  S --> R["写部署记录<br>.deployed-rev<br>.deployed-by"]
+  R --> V["运维界面页头确认提交号"]
+```
 
 ```bash
 git pull                             # 1. 先拉取：别人可能已经部署了新代码
@@ -151,7 +290,7 @@ ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括
 2. **同步**：把代码同步到 manager 的 `$REMOTE_DIR`，同时同步环境参数，生成 `$REMOTE_DIR/.env`。
 3. **清理旧文件**：删除上次部署过、这次已经不存在的文件（按 `.deployed-files` 清单）。`.venv`、`.env` 和不是脚本部署的文件都不会动。
 4. **安装依赖**：`uv sync --frozen`，只装 manager 需要的 host、algo、ui 三组。
-5. **安装 unit**：在本机渲染 unit 模板，只安装 `inventory.toml` 里登记为 `owner="ours"` 且 `managed=true` 的 unit，然后重启运维界面。加了 `--restart` 时，还会重启正在运行的采集器。
+5. **安装 unit**：在本机渲染 unit 模板，只安装 `inventory.toml` 里 `owner` 等于 `[cluster].maintainer`（目前是 `soar009`）且 `managed=true` 的 unit，然后重启运维界面。加了 `--restart` 时，还会重启正在运行的采集器。
 6. **记录**：写下 `.deployed-rev`（提交）和 `.deployed-by`（谁、什么时候、从哪台机器）。
 
 脚本**不会**做这些事：
@@ -188,7 +327,7 @@ ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
   | manager 上的提交"不是 HEAD 的祖先" | 拒绝部署 | 别人在你之后部署过：先 `git pull` 合并，再部署 |
   | manager 上的提交"不在 origin 上" | 拒绝部署 | 有人部署了没推送的代码：在运维界面页头悬停看到部署人，让对方推送。**不要直接用 `--force` 覆盖** |
 - **查看当前部署**：看运维界面页头（悬停可以看到部署人和时间），或者执行 `ssh Manager-Node 'cat ~/swarm-lb/.deployed-rev ~/swarm-lb/.deployed-by'`。
-- **端口归属**：以 `inventory.toml` 为准。`owner = "others"` 的服务（目前是 8081）只能只读查看，任何脚本都不能修改它的 unit、venv 或代码目录。
+- **端口归属**：以 `inventory.toml` 为准。`owner` 直接写人名。只有 `owner` 等于 `[cluster].maintainer`（目前是 `soar009`）的服务能在运维界面启停、被部署脚本安装；其他人的服务（目前是 user01 的 8081）只能只读查看，任何脚本都不能修改它的 unit、venv 或代码目录。
 
 ## 回滚
 
@@ -200,16 +339,16 @@ ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
 
 完整信息以 [inventory.toml](inventory.toml) 为准。
 
-| 端口           | unit              | 归属   | 内容                                                         | 开机自启           |
-| -------------- | ----------------- | ------ | ------------------------------------------------------------ | ------------------ |
-| 5000           | `swarm-lb-ops`    | ours   | 运维界面 `ops/cluster/ui/server.py`                          | 是                 |
-| 9100           | `swarm-lb-agent`  | ours   | 节点 agent，每个节点一份                                     | 是                 |
-| 8080           | `collect_8080`    | ours   | `manager_hmsw.py`（DQN / direct / sd_min / min_min / RR）    | 否，需要时手动启动 |
-| 8081           | `collect_8081`    | others | `~/appv8/manager/manager_hmsw_v2.py`，user01在用，**不要动** | 否                 |
-| 8082           | `collect_8082_rr` | ours   | XGB 数据采集 · Round Robin                                   | 是                 |
-| 8083           | `collect_8083`    | ours   | XGB 数据采集 · Least Time，代码在 `~/appv8`，还没迁进本仓库  | 是                 |
-| 8084           | `collect_8084`    | ours   | XGB 数据采集 · handle_hdd v2（RR）                           | 是                 |
-| 8080（worker） | swarm 服务        | ours   | worker 容器 `image/worker-app/app.py`                        | 由 swarm 管理      |
+| 端口           | unit              | 归属    | 内容                                                         | 开机自启           |
+| -------------- | ----------------- | ------- | ------------------------------------------------------------ | ------------------ |
+| 5000           | `swarm-lb-ops`    | soar009 | 运维界面 `ops/cluster/ui/server.py`                          | 是                 |
+| 9100           | `swarm-lb-agent`  | soar009 | 节点 agent，每个节点一份                                     | 是                 |
+| 8080           | `collect_8080`    | soar009 | `manager_hmsw.py`（DQN / direct / sd_min / min_min / RR）    | 否，需要时手动启动 |
+| 8081           | `collect_8081`    | user01  | `~/appv8/manager/manager_hmsw_v2.py`，user01在用，**不要动** | 否                 |
+| 8082           | `collect_8082_rr` | soar009 | XGB 数据采集 · Round Robin                                   | 是                 |
+| 8083           | `collect_8083`    | soar009 | XGB 数据采集 · Least Time，代码在 `~/appv8`，还没迁进本仓库  | 是                 |
+| 8084           | `collect_8084`    | soar009 | XGB 数据采集 · handle_hdd v2（RR）                           | 是                 |
+| 8080（worker） | swarm 服务        | soar009 | worker 容器 `image/worker-app/app.py`                        | 由 swarm 管理      |
 
 有些脚本把端口写死在代码里，不能同时运行：`manager_hmsw8d.py`、`manager_hmsw_collect.py` 和 8080 冲突，`manager_xgbdata_collecter.py` 和 8082 冲突。
 

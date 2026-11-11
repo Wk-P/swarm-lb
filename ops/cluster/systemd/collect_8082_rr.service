@@ -1,7 +1,7 @@
 # 由 swarm-lb 仓库管理：ops/cluster/systemd/collect_8082_rr.service  (ops/local/deploy-host.sh 安装)
 # 模板：@变量名@ 占位符由 ops/lib.sh 的 render 用环境参数替换
 [Unit]
-Description=swarm-lb 8082 XGB collector rr [ours]
+Description=swarm-lb 8082 XGB collector rr [soar009]
 After=network.target
 
 [Service]

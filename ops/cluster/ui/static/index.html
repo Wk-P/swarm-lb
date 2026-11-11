@@ -1331,7 +1331,11 @@
             restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>',
             logs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>',
         };
-        const ownerChip = { ours: ["soar009", "var(--n-manager)"], others: ["user01", "var(--warn)"], unknown: ["未确认", "var(--ink-3)"] };
+        // owner 直接是人名；等于 cluster.maintainer 的可操作，其余只读
+        const ownerChip = (owner, maintainer) =>
+            !owner || owner === "unknown" ? ["未确认", "var(--ink-3)"]
+                : owner === maintainer ? [owner, "var(--n-manager)"]
+                    : [owner, "var(--warn)"];
 
         function renderSvcs(ov) {
             $("svcs").innerHTML = ov.services.map(s => {
@@ -1339,16 +1343,16 @@
                 const active = st.ActiveState === "active", failed = st.ActiveState === "failed";
                 const missing = st.LoadState === "not-found";
                 const stateTxt = missing ? "未安装" : active ? (s.port && !s.listening ? "启动中" : "运行中") : failed ? "失败" : "已停止";
-                const [ot, oc] = ownerChip[s.owner] || ownerChip.unknown;
+                const [ot, oc] = ownerChip(s.owner, ov.cluster.maintainer);
                 const q = s.queue;
                 let slots = "";
                 if (q && q.worker_status) {
                     slots = `<div class="slots" title="采集 worker 槽位 · 队列 ${q.queue_size}">${Object.values(q.worker_status).map(v => `<i class="${v === "idle" ? "" : "busy"}"></i>`).join("")}<span class="num">&nbsp;队列 ${q.queue_size}${q.total_tasks ? " · 累计 " + q.total_tasks : ""}</span></div>`;
                 } else if (q && q.error) slots = `<div class="slots">队列不可达</div>`;
                 else if (st.UnitFileState) slots = `<div class="slots">${st.UnitFileState === "enabled" ? "开机自启" : "不自启"}</div>`;
-                const ours = s.owner === "ours" && !missing;
+                const canOp = !!ov.cluster.maintainer && s.owner === ov.cluster.maintainer && !missing;
                 const b = (a, label) => `<button class="act" data-unit="${esc(s.unit)}" data-act="${a}" title="${label}">${ICON[a]}</button>`;
-                const acts = (ours ? (active ? (s.self ? b("restart", "重启界面") : b("restart", "重启") + b("stop", "停止")) : b("start", "启动")) : "")
+                const acts = (canOp ? (active ? (s.self ? b("restart", "重启界面") : b("restart", "重启") + b("stop", "停止")) : b("start", "启动")) : "")
                     + (missing ? "" : b("logs", "日志"));
                 return `<div class="svc ${active ? "" : "dim"}">
       <div class="head"><span class="port num ${s.port ? "" : "none"}">${s.port ? s.port : "—"}</span>
