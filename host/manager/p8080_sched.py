@@ -6,7 +6,7 @@ from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from copy import deepcopy
 
-from manager_objects import ServerManager, ManagerResponse
+from objects import ServerManager, ManagerResponse
 import asyncio
 import traceback
 import aiohttp

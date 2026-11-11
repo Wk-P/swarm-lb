@@ -1,7 +1,7 @@
 # 由 swarm-lb 仓库管理：ops/cluster/systemd/collect_8081.service  (ops/local/deploy-host.sh 安装)
 # 模板：@变量名@ 占位符由 ops/lib.sh 的 render 用环境参数替换
 [Unit]
-Description=swarm-lb 8081 manager_hmsw_v2 [user01]
+Description=swarm-lb 8081 p8081_sched_v2 [user01]
 After=network.target
 
 [Service]
@@ -14,7 +14,7 @@ WorkingDirectory=@REMOTE_DIR@/host/manager/
 EnvironmentFile=-@REMOTE_DIR@/.env
 Environment=PYTHONUNBUFFERED=1
 
-ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/manager_hmsw_v2.py
+ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/p8081_sched_v2.py
 
 Restart=no
 

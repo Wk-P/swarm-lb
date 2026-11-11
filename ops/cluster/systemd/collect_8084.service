@@ -14,7 +14,7 @@ WorkingDirectory=@REMOTE_DIR@/host/manager/
 EnvironmentFile=-@REMOTE_DIR@/.env
 Environment=PYTHONUNBUFFERED=1
 
-ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/manager_xgbdata_collector_handle_hdd_v2.py
+ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/p8084_collect_hdd_rr.py
 
 Restart=no
 

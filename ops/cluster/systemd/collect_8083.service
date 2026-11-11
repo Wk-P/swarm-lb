@@ -14,7 +14,7 @@ WorkingDirectory=@REMOTE_DIR@/host/manager/
 EnvironmentFile=-@REMOTE_DIR@/.env
 Environment=PYTHONUNBUFFERED=1
 
-ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/manager_xgbdata_collecter_lstt.py
+ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/p8083_collect_lstt.py
 
 Restart=no
 

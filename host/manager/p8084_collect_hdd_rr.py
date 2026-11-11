@@ -1,11 +1,11 @@
-# manager_xgbdata_collecter_rr.py
+# p8084_collect_hdd_rr.py（原 manager_xgbdata_collector_handle_hdd_v2.py）
 # Data collection manager with task queuing and scheduling
 
 from aiohttp import web
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from copy import deepcopy
-from manager_objects_handle_hdd_v2 import ServerManager
+from objects_hdd import ServerManager
 import asyncio  
 import aiohttp
 import traceback

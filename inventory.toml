@@ -64,37 +64,36 @@ note = "所有节点都有一份（~/swarm-lb-agent/），由 ops/local/deploy-a
 port = 8080
 unit = "collect_8080.service"
 owner = "soar009"
-title = "v8 manager_hmsw（DQN / direct / sd_min / min_min / RR）"
-script = "host/manager/manager_hmsw.py"
+title = "调度器（DQN / direct / sd_min / min_min / RR）"
+script = "host/manager/p8080_sched.py"
 managed = true
 status_path = ""
-note = "开机不自启。manager_hmsw8d.py / manager_hmsw_collect.py 也写死 8080，不能同时运行"
+note = "开机不自启"
 
 [[service]]
 port = 8081
 unit = "collect_8081.service"
 owner = "user01"
-title = "manager_hmsw_v2（RL_MOTS / Ablation / algor_set）"
-script = "host/manager/manager_hmsw_v2.py"
+title = "调度器 v2（RL_MOTS / Ablation / algor_set）"
+script = "host/manager/p8081_sched_v2.py"
 managed = true
 note = "user01 使用。2026-11-11 从 ~/appv8 迁入本仓库（代码与原版一致，仅 SSH 账号改读 .env）。改代码请改仓库后部署"
 
 [[service]]
 port = 8082
-unit = "collect_8082_rr.service"
+unit = "collect_8082.service"
 owner = "soar009"
 title = "v8 XGB 数据采集 · Round Robin"
-script = "host/manager/manager_xgbdata_collecter_rr.py"
+script = "host/manager/p8082_collect_rr.py"
 managed = true
 status_path = "/queue/status"
-note = "manager_xgbdata_collecter.py 也写死 8082，不能同时运行"
 
 [[service]]
 port = 8083
 unit = "collect_8083.service"
 owner = "soar009"
 title = "XGB 数据采集 · Least Time"
-script = "host/manager/manager_xgbdata_collecter_lstt.py"
+script = "host/manager/p8083_collect_lstt.py"
 managed = true
 status_path = "/queue/status"
 note = "2026-11-11 从 ~/appv8 迁入本仓库（代码与原版一致，仅 SSH 账号改读 .env）"
@@ -104,7 +103,7 @@ port = 8084
 unit = "collect_8084.service"
 owner = "soar009"
 title = "v8 XGB 数据采集 · handle_hdd v2（RR）"
-script = "host/manager/manager_xgbdata_collector_handle_hdd_v2.py"
+script = "host/manager/p8084_collect_hdd_rr.py"
 managed = true
 status_path = "/queue/status"
 

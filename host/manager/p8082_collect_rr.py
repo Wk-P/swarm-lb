@@ -1,11 +1,11 @@
-# manager_xgbdata_collecter_rr.py
+# p8082_collect_rr.py（原 manager_xgbdata_collecter_rr.py）
 # Data collection manager with task queuing and scheduling
 
 from aiohttp import web
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from copy import deepcopy
-from manager_objects import ServerManager
+from objects import ServerManager
 import asyncio  
 import aiohttp
 import traceback

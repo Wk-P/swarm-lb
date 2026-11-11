@@ -1,7 +1,7 @@
 # 由 swarm-lb 仓库管理：ops/cluster/systemd/collect_8080.service  (ops/local/deploy-host.sh 安装)
 # 模板：@变量名@ 占位符由 ops/lib.sh 的 render 用环境参数替换
 [Unit]
-Description=swarm-lb 8080 manager_hmsw [soar009]
+Description=swarm-lb 8080 p8080_sched [soar009]
 After=network.target
 
 [Service]
@@ -15,7 +15,7 @@ EnvironmentFile=-@REMOTE_DIR@/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=RGB_LICENSE_FILE=@GRB_LICENSE_FILE@
 Environment=GRB_LICENSE_FILE=@GRB_LICENSE_FILE@
-ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/manager_hmsw.py
+ExecStart=@REMOTE_DIR@/.venv/bin/python @REMOTE_DIR@/host/manager/p8080_sched.py
 
 Restart=no
 

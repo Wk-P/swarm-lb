@@ -35,7 +35,7 @@ DEST=$REMOTE_DIR
 cd "$REPO_ROOT"
 
 # 部署到集群上的路径（其余：clients/ 在集群外运行，ops/local/ 只在开发机用）
-SYNC_EXCLUDE='^(clients|ops/local|envs|data|legacy)/'
+SYNC_EXCLUDE='^(clients|ops/local|envs|data|legacy|host/archive|image/versions)/'
 UV_GROUPS="--no-default-groups --group host --group algo --group ui"
 
 fail_or_force() { if [[ $FORCE == 1 ]]; then echo "  ⚠️  $*（--force，继续）"; else die "$*   （确认无误可加 --force）"; fi; }

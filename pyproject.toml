@@ -27,7 +27,7 @@ ui = [
     "aiohttp==3.11.6",
     "docker==7.1.0",
 ]
-# 8080 manager_hmsw*.py 及 LB_algorithm/model 所需（DQN、gurobi、xgboost 预测）
+# 8080/8081 调度器（p8080_sched.py、p8081_sched_v2.py）及 LB_algorithm/model 所需（DQN、gurobi、xgboost 预测）
 algo = [
     "numpy==2.1.3",
     "joblib==1.4.2",
