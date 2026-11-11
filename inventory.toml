@@ -1,5 +1,5 @@
 # swarm-lb 资源登记表 —— "什么跑在哪、端口归谁" 的唯一来源
-# 运维界面 (ops/cluster/ui/) 和部署脚本 (ops/local/deploy-host.sh) 都读这个文件。
+# 运维界面 (ops/cluster/ui/) 和部署脚本 (uv run ops/local/deploy_host.py) 都读这个文件。
 # ${VAR} 是环境参数（envs/<环境名>.env，部署后为 manager 上的 .env），运维界面加载时展开。
 #
 # owner：服务的使用者/负责人，直接写人名（如 "soar009"、"user01"），未确认写 "unknown"。只用于显示和操作提示。
@@ -11,7 +11,7 @@ stack = "collect_data_stack"
 image = "${DOCKER_IMAGE}"
 manager_ip = "${MANAGER_IP}"
 maintainer = "soar009"    # 本仓库的维护者：运维界面操作别人（owner ≠ maintainer）的服务时会二次确认
-agent_port = 9100         # 每个节点上的监控 agent（ops/cluster/agent/node_agent.py，ops/local/deploy-agents.sh 部署）
+agent_port = 9100         # 每个节点上的监控 agent（ops/cluster/agent/node_agent.py，uv run ops/local/deploy_agents.py 部署）
 
 [[node]]
 name = "manager"
@@ -49,7 +49,7 @@ unit = "swarm-lb-ops.service"
 owner = "soar009"
 title = "运维管理界面"
 script = "ops/cluster/ui/server.py"
-managed = true            # unit 模板在 ops/cluster/systemd/，deploy-host.sh 安装
+managed = true            # unit 模板在 ops/cluster/systemd/，deploy_host.py 安装
 self = true               # 界面自身：不提供"停止"按钮
 
 [[service]]
@@ -58,14 +58,14 @@ unit = "swarm-lb-agent.service"
 owner = "soar009"
 title = "节点监控 agent"
 script = "ops/cluster/agent/node_agent.py"
-note = "所有节点都有一份（~/swarm-lb-agent/），由 ops/local/deploy-agents.sh 部署；这里只列 manager 本机这份"
+note = "所有节点都有一份（~/swarm-lb-agent/），由 uv run ops/local/deploy_agents.py 部署；这里只列 manager 本机这份"
 
 [[service]]
 port = 8080
 unit = "collect_8080.service"
 owner = "soar009"
-title = "调度器（DQN / direct / sd_min / min_min / RR）"
-script = "host/manager/p8080_sched.py"
+title = "单任务调度器（峰值 MILP / 均衡 MILP / DQN / min-min / RR）"
+script = "host/manager/scheduler_single.py"
 managed = true
 status_path = ""
 note = "开机不自启"
@@ -74,8 +74,8 @@ note = "开机不自启"
 port = 8081
 unit = "collect_8081.service"
 owner = "user01"
-title = "调度器 v2（RL_MOTS / Ablation / algor_set）"
-script = "host/manager/p8081_sched_v2.py"
+title = "批量调度器（峰值 MILP / 均衡 MILP / RL-MOTS / Ablation）"
+script = "host/manager/scheduler_batch.py"
 managed = true
 note = "user01 使用。2026-11-11 从 ~/appv8 迁入本仓库（代码与原版一致，仅 SSH 账号改读 .env）。改代码请改仓库后部署"
 
@@ -84,7 +84,7 @@ port = 8082
 unit = "collect_8082.service"
 owner = "soar009"
 title = "v8 XGB 数据采集 · Round Robin"
-script = "host/manager/p8082_collect_rr.py"
+script = "host/manager/collector_rr.py"
 managed = true
 status_path = "/queue/status"
 
@@ -93,7 +93,7 @@ port = 8083
 unit = "collect_8083.service"
 owner = "soar009"
 title = "XGB 数据采集 · Least Time"
-script = "host/manager/p8083_collect_lstt.py"
+script = "host/manager/collector_lstt.py"
 managed = true
 status_path = "/queue/status"
 note = "2026-11-11 从 ~/appv8 迁入本仓库（代码与原版一致，仅 SSH 账号改读 .env）"
@@ -103,7 +103,7 @@ port = 8084
 unit = "collect_8084.service"
 owner = "soar009"
 title = "v8 XGB 数据采集 · handle_hdd v2（RR）"
-script = "host/manager/p8084_collect_hdd_rr.py"
+script = "host/manager/collector_hdd_tier.py"
 managed = true
 status_path = "/queue/status"
 

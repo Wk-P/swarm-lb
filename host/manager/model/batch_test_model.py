@@ -4,7 +4,7 @@ import joblib
 from pathlib import Path
 import pandas as pd
 
-model_path = Path(__file__).parent / "v1" / "xgb_multioutput_model.joblib"
+model_path = Path(__file__).parent / "batch_xgb_multioutput.joblib"
 if model_path.exists():
     xgb_model = joblib.load(model_path)
 else:

@@ -1,7 +1,7 @@
 #!/bin/bash
-# 【集群内执行·manager】从开发机调用：ops/local/remote.sh <环境名> rebuild-swarm.sh
+# 【集群内执行·manager】从开发机调用：uv run ops/local/remote.py <环境名> rebuild-swarm.sh
 # 重建 swarm（leave → init → workers 重新 join → 恢复节点 label → 部署 stack）。交互式：要输入各 worker 的密码。
-# 参数来自 $REMOTE_DIR/.env（deploy-host.sh 同步过去）。
+# 参数来自 $REMOTE_DIR/.env（deploy_host.py 同步过去）。
 #   stack：STACK_NAME + STACK_COMPOSE（本仓库 image/stack/collect_data_stack.yml，镜像按 digest 锁定）
 #   label：按 inventory.toml 的 [[node]] 恢复 type=low/middle/high，否则服务的放置约束无法满足，会一直 pending
 set -e

@@ -3,7 +3,7 @@
 一个任务负载均衡和调度实验项目，跑在树莓派 Docker Swarm 集群上（1 个 manager、3 个 worker）。manager 上的调度器负责接收客户端请求，再按算法（RR、min_min、sd_min、DQN、RL_MOTS 等）把任务分给 worker 容器，同时采集训练数据。
 
 - [概览](#概览)：整体结构、目录
-- [首次使用](#首次使用)：新机器接入
+- [首次使用](#首次使用)：新成员接入（访问包 zip，Linux / Windows）
 - [一、服务器、网络与路由器](#一服务器网络与路由器)
 - [二、Docker 部署与 Swarm 集群](#二docker-部署与-swarm-集群)
 - [三、代码改动、部署与 GitHub](#三代码改动部署与-github)
@@ -55,7 +55,7 @@ manager 上的 5 个调度器/采集器（8080–8084）**共用同一个 stack*
 
 | 路径                   | 在哪运行                     | 内容                                                                                                          |
 | ---------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `host/manager/`        | manager 宿主机（systemd）    | 调度器和采集器 `p<端口>_*.py`、共用对象 `objects*.py`、调度算法 `LB_algorithm/`、模型 `model/`、`settings.py` |
+| `host/manager/`        | manager 宿主机（systemd）    | 调度器 `scheduler_*.py`、数据采集器 `collector_*.py`、算法 `algorithms/`、模型 `model/` 等，见下表           |
 | `host/archive/`        | —（不部署）                  | 已停用的调度器/采集器和重复文件，见 [host/archive/README.md](host/archive/README.md)                          |
 | `image/worker-app/`    | worker 上的 docker 容器      | 当前 worker 服务 `app.py`（= v8.7）、`Dockerfile`，有独立的 `pyproject.toml` 和 `uv.lock`                     |
 | `image/stack/`         | swarm                        | 线上 stack 定义 `collect_data_stack.yml`（镜像按 digest 锁定）                                                |
@@ -65,8 +65,8 @@ manager 上的 5 个调度器/采集器（8080–8084）**共用同一个 stack*
 | `ops/cluster/agent/`   | 每个节点 :9100               | 节点监控 agent，只用标准库，只读                                                                              |
 | `ops/cluster/systemd/` | manager 和各节点             | systemd unit 模板，`@变量名@` 在部署时用环境参数替换                                                          |
 | `ops/cluster/bin/`     | manager                      | 集群内运维脚本：重建 swarm、启停 stack、构建镜像、查询队列等                                                  |
-| `ops/local/`           | 开发机                       | 部署脚本和远程执行入口；`snapshots/` 是集群状态快照（不进 git）                                               |
-| `ops/lib.sh`           | 开发机和 manager 共用        | 加载环境参数、模板渲染                                                                                        |
+| `ops/local/`           | 开发机                       | 部署、远程执行、开通访问的 Python 脚本（`uv run` 运行，Linux / Windows 通用）；`snapshots/` 不进 git          |
+| `ops/lib.sh`           | manager                      | `ops/cluster/bin/` 脚本加载 `.env` 用                                                                         |
 | `envs/`                | 开发机                       | 各环境参数，只有 `example.env` 进 git                                                                         |
 | `inventory.toml`       | 开发机和 manager 共用        | 节点、服务、端口归属的登记表，运维界面和部署脚本都读它                                                        |
 | `data/`                | —                            | 实验日志和数据（不进 git）                                                                                    |
@@ -75,87 +75,113 @@ manager 上的 5 个调度器/采集器（8080–8084）**共用同一个 stack*
 
 **规则：除 `ops/local/`、`clients/`、`envs/`、`data/`、`legacy/`、`host/archive/`、`image/versions/` 外，其余进 git 的文件都会被部署到 manager 上。**
 
+#### `host/manager/` 里有什么
+
+| 文件 / 目录 | 端口 | 做什么 |
+| --- | --- | --- |
+| `scheduler_single.py` | 8080 | **单任务调度器**：每个请求用 XGBoost 预测各 worker 的响应时间，按请求指定的算法选一个 worker 转发 |
+| `scheduler_batch.py` | 8081 | **批量调度器**（user01）：一次收一批任务，预测 任务×worker 时间矩阵，一次性分配 |
+| `collector_rr.py` | 8082 | **训练数据采集 · 轮询**：任务排队，按轮询预先指定 worker，超出容量就拆分 |
+| `collector_lstt.py` | 8083 | **训练数据采集 · LSTT**：按最小 worker 容量拆分，不预先指定，哪个 worker 空闲给哪个 |
+| `collector_hdd_tier.py` | 8084 | **训练数据采集 · 按磁盘档位**：按请求的 HDD 档位选能容纳的最小 worker，否则轮询并改派 |
+| `worker_manager.py` | — | 8080–8083 共用：发现 swarm 里的 worker，通过 SSH 实测内存、磁盘 |
+| `worker_manager_static.py` | — | 8084 用：worker 资源上限读配置文件，不 SSH |
+| `swarm/` | — | 查询 swarm 的服务、节点、资源上限（`info.py` SSH 实测，`info_static.py` 读 `worker_hdd_limits.json`） |
+| `algorithms/single/` | 8080 | `peak_milp.py`（请求名 `algor1`，最小化峰值占用）、`balance_milp.py`（`algor2`，最小化占用不均衡）、`double_dqn.py`（`dqn`）、`min_min.py`、`round_robin.py` |
+| `algorithms/batch/` | 8081 | `peak_milp.py`（`algor1_set`）、`balance_milp.py`（`algor2_set`）、`rl_mots.py`（`RL-MOTS`）、`rl_mots_ablation.py`（`Ablation`，状态用等待时间代替预测时间的消融版本） |
+| `model/` | — | `single_xgb.joblib`（8080）；`batch_xgb_multioutput.joblib` 及 `batch_predict.py`、`batch_preprocess.py`（8081） |
+| `settings.py`、`stack_name` | — | 读 `.env` 里的 SSH 账号；stack 名 |
+
+请求里用的算法名（`algor1`、`dqn`、`RL-MOTS` 等）没有变。
+
 ## 首次使用
 
-同一个 192.168.1.x 网段里的任何一台机器，按下面的步骤配置后，都能像现有的开发机一样运维：部署、执行集群内脚本、发请求。GitHub 只用来同步代码；运维靠的是本机的 env 文件和 ssh 密钥，这两样都不进 git。
+同一个 192.168.1.x 网段里的任何一台机器（Linux、macOS 或 Windows），配置好之后都能像现有的开发机一样运维：部署、执行集群内脚本、发请求。GitHub 只用来同步代码；运维靠的是本机的 env 文件和 ssh 密钥，这两样都不进 git，统一放在**访问包 zip** 里交给新成员。
 
 > 只想**查看状态、启停采集器、看日志**的话，什么都不用装，浏览器打开 `http://<manager IP>:5000/` 就行（运维界面，在同一网段内都能访问）。
 
+开发机上的运维脚本都是 Python（`ops/local/*.py`，只用标准库），用 `uv run` 运行，Linux、macOS、Windows（PowerShell 或 Git Bash）都一样：
+
+```bash
+uv run ops/local/deploy_host.py lab        # 部署
+uv run ops/local/remote.py lab <脚本名>     # 在 manager 上执行集群内脚本
+```
+
 ```mermaid
 flowchart TD
-  A["同网段的新机器"] --> B{"只需要查看状态、<br>启停采集器？"}
+  A["新成员"] --> B{"只需要查看状态、<br>启停采集器？"}
   B -- 是 --> UI["浏览器打开<br>http://&lt;manager IP&gt;:5000/"]
-  B -- 否 --> C["2. clone 仓库、uv sync"]
-  C --> D["3. 私下拿到 envs/lab.env"]
-  D --> E["4. 生成自己的 ssh 密钥"]
-  E --> F{"知道 pi 的密码？"}
-  F -- 是 --> G["ssh-copy-id 到 4 个节点"]
-  F -- 否 --> H["把公钥交给已有成员追加"]
-  G --> I["5. 配置 ~/.ssh/config 别名"]
-  H --> I
-  I --> J["6. 验证：免密登录、sudo、<br>remote.sh、check-stack.sh"]
-  J --> K["7. git pull，按修改代码的流程部署"]
+  B -- 否 --> C["已有成员执行<br>uv run ops/local/make_access.py lab &lt;成员名&gt;"]
+  C --> D["私下把 zip 交给新成员<br>GitHub 上加为 collaborator"]
+  D --> E{"新成员的系统"}
+  E -- "Linux / macOS" --> F["按 zip 里 README.md 的<br>Linux / macOS 步骤"]
+  E -- Windows --> G["按 zip 里 README.md 的<br>Windows 步骤"]
+  F --> H["验证：免密登录、sudo、<br>remote.py、check-stack.sh"]
+  G --> H
+  H --> K["git pull，按修改代码的流程部署"]
 ```
 
-### 1. 前提
-
-| 项目     | 要求                                                                                                                      |
-| -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 网络     | 本机在集群所在的 192.168.1.x 网段，能 `ping` 通 manager 和 3 台 worker                                                    |
-| GitHub   | 能 clone 本仓库；**要部署的话还需要 push 权限**（找仓库所有者加为 collaborator）                                          |
-| 工具     | Windows 用 [Git Bash](https://git-scm.com/download/win)（Linux、macOS 用自带终端），加上 [uv](https://docs.astral.sh/uv/) |
-| 已有成员 | 需要一位已有成员提供 `envs/lab.env`，并协助把你的公钥加到各节点上（或者告诉你 `pi` 的密码）                               |
-
-下面的命令都在 Git Bash 里执行。Windows 上 Git Bash 的 `~` 就是 `C:\Users\<你的用户名>`。
-
-### 2. 获取代码、安装依赖
+### 1. 开通访问（已有成员操作）
 
 ```bash
-git config --global user.name  "<你的名字>"      # 部署记录 .deployed-by 里会显示
-git config --global user.email "<你的邮箱>"
-git clone https://github.com/Wk-P/swarm-lb.git && cd swarm-lb
-uv sync                                         # 安装开发机依赖
+uv run ops/local/make_access.py lab <成员名>      # 例：uv run ops/local/make_access.py lab user02
 ```
 
-### 3. 放置环境参数 `envs/lab.env`
+脚本会：
 
-向已有成员要一份 `lab.env`，放到 `envs/lab.env`。这个文件里有 IP 和密码，**要私下传**（比如当面拷贝或者用内网共享），不要通过 git、issue 或者公开的群聊发送。`envs/*.env` 已在 `.gitignore` 里，只有 `example.env` 会进 git。
+1. 在 `secrets/<成员名>-access/` 生成一把专给这个人的 ed25519 密钥（已经有就复用）；
+2. 把公钥加到 4 个节点 `pi` 账号的 `authorized_keys`，并用新密钥逐个验证能登录；
+3. 生成 4 个节点的 ssh 配置，复制 `envs/lab.env`，按 [ops/local/access-pack-README.md](ops/local/access-pack-README.md) 生成说明（Linux / macOS、Windows 两套步骤）；
+4. 打包成 `secrets/swarm-lb-<成员名>-access.zip`。
 
-拿不到现成文件时，可以从模板复制再逐项填写：`cp envs/example.env envs/lab.env`。每个变量的含义见[环境参数](#环境参数)。
+zip 里有**私钥和密码**，要私下交给对方（当面拷贝或内网共享），不要通过 git、网盘、issue 或公开群聊发送。`secrets/` 在 `.gitignore` 里，不进 git，也不会被部署。
+
+要部署的话，还要在 GitHub 上把对方加为仓库的 collaborator（需要 push 权限）。
+
+### 2. 配置本机（新成员操作）
+
+解压 zip，按里面 `README.md` 的步骤做。两种系统的区别：
+
+| | Linux / macOS | Windows |
+| --- | --- | --- |
+| 需要安装 | git、[uv](https://docs.astral.sh/uv/) | [Git for Windows](https://git-scm.com/download/win)、uv |
+| 安装 uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | PowerShell：`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
+| 终端 | 系统自带终端 | PowerShell 或 Git Bash 都可以 |
+| 私钥权限 | `chmod 600 ~/.ssh/swarm_lb_<成员名>_ed25519` | 用 `icacls` 收紧权限，否则 Windows 自带的 ssh 会拒绝使用（zip 说明里有命令） |
+
+两边共同的步骤：私钥复制到 `~/.ssh/`（Windows 是 `C:\Users\<你>\.ssh\`），`ssh_config.txt` 追加到 `~/.ssh/config`，clone 仓库，`lab.env` 放到 `envs/lab.env`，`uv sync`。
+
+### 3. 验证
 
 ```bash
-grep -E '_SSH=|_IP=' envs/lab.env     # 记下 4 个节点的 ssh 别名和 IP，下一步要用
+# 4 个节点都能免密登录（第一次连接会问是否信任主机指纹，输入 yes）
+ssh Manager-Node hostname
+ssh Worker-Node-1 hostname
+ssh Worker-Node-2 hostname
+ssh Worker-Node-3 hostname
+
+ssh Manager-Node "sudo -n true && echo sudo OK"     # 部署需要 manager 上的免密 sudo（pi 账号已配置）
+uv run ops/local/remote.py lab                      # 能列出 ops/cluster/bin/ 下的脚本，说明 env 文件没问题
+uv run ops/local/remote.py lab check-stack.sh       # 能看到 collect_data_stack 的 3 个服务
 ```
 
-### 4. 生成自己的 ssh 密钥，并加到 4 个节点
+全部通过后，打开 `http://<manager IP>:5000/`，确认能看到运维界面。
 
-**每人用自己的密钥，不要拷贝别人的私钥。** 这样以后有人不再参与时，只删掉他那一行公钥就行。
+### 4. 第一次部署前
+
+先不要急着部署。执行 `git pull`，然后看一眼运维界面页头的提交号，确认和你本地的 HEAD 一致或者是它的祖先。之后按[修改代码的流程](#修改代码的流程)操作。部署前的检查会挡住"覆盖别人部署"的情况，详见[多人协作](#多人协作)。
+
+### 不用访问包、自己配置
+
+已经知道 `pi` 的密码，也可以自己生成密钥：
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/swarm_lb_ed25519 -C "<你的名字>@<机器名>"   # 可以直接回车，不设密码短语
+ssh-keygen -t ed25519 -f ~/.ssh/swarm_lb_ed25519 -C "<你的名字>@<机器名>"
+ssh-copy-id -i ~/.ssh/swarm_lb_ed25519.pub pi@<节点 IP>    # 4 个节点各执行一次（Windows 没有 ssh-copy-id，用 Git Bash 执行）
+cp envs/example.env envs/lab.env                           # 逐项填写，含义见「环境参数」
 ```
 
-把公钥加到 manager 和 3 台 worker（`pi` 账号）上，两种方式任选一种：
-
-- **知道 `pi` 的密码**：对每个节点执行一次，按提示输入密码。
-  ```bash
-  for ip in <manager IP> <worker1 IP> <worker2 IP> <worker3 IP>; do
-    ssh-copy-id -i ~/.ssh/swarm_lb_ed25519.pub pi@$ip
-  done
-  ```
-- **不知道密码**：把 `~/.ssh/swarm_lb_ed25519.pub` 的内容（一行文本，可以公开）发给已有成员，由对方追加到 4 个节点的 `~pi/.ssh/authorized_keys`。
-  ```bash
-  # 已有成员执行，<公钥> 换成整行内容
-  for h in Manager-Node Worker-Node-1 Worker-Node-2 Worker-Node-3; do
-    ssh $h 'cat >> ~/.ssh/authorized_keys' <<< '<公钥>'
-  done
-  ```
-
-也可以由已有成员生成好密钥、加到各节点，再把私钥、ssh 配置和 env 打成 zip 交给新成员（放在本机 `secrets/` 下，不进 git）。
-
-### 5. 配置 ssh 别名 `~/.ssh/config`
-
-每个节点写一段。**`Host` 后面的名字必须和 `envs/lab.env` 里的 `MANAGER_SSH`、`WORKER1_SSH`…`WORKER3_SSH` 完全一致**，脚本是按这些别名连接的。下面以 lab 环境的别名为例：
+再在 `~/.ssh/config` 里给每个节点写一段（`Host` 名必须和 env 里的 `MANAGER_SSH`、`WORKER1_SSH`…`WORKER3_SSH` 一致）：
 
 ```
 Host Manager-Node
@@ -163,34 +189,10 @@ Host Manager-Node
     User pi
     IdentityFile ~/.ssh/swarm_lb_ed25519
     IdentitiesOnly yes
-
-Host Worker-Node-1
-    HostName <worker1 IP>
-    User pi
-    IdentityFile ~/.ssh/swarm_lb_ed25519
-    IdentitiesOnly yes
-
-# Worker-Node-2、Worker-Node-3 同上，只改 Host 和 HostName
+# Worker-Node-1、Worker-Node-2、Worker-Node-3 同上，只改 Host 和 HostName
 ```
 
-### 6. 验证
-
-```bash
-# 4 个节点都能免密登录（第一次连接会问是否信任主机指纹，输入 yes）
-for h in Manager-Node Worker-Node-1 Worker-Node-2 Worker-Node-3; do
-  ssh -o BatchMode=yes $h hostname || echo "!! $h 连不上"
-done
-
-ssh Manager-Node 'sudo -n true' && echo "sudo OK"   # 部署需要 manager 上的免密 sudo（pi 账号已配置）
-ops/local/remote.sh lab                             # 能列出 ops/cluster/bin/ 下的脚本，说明 env 文件没问题
-ops/local/remote.sh lab check-stack.sh              # 能看到 collect_data_stack 的 3 个服务
-```
-
-全部通过后，打开 `http://<manager IP>:5000/`，确认能看到运维界面。
-
-### 7. 第一次部署前
-
-先不要急着部署。执行 `git pull`，然后看一眼运维界面页头的提交号，确认和你本地的 HEAD 一致或者是它的祖先。之后按[修改代码的流程](#修改代码的流程)操作。部署前的检查会挡住"覆盖别人部署"的情况，详见[多人协作](#多人协作)。
+**每人用自己的密钥，不要共用。** 这样以后有人不再参与时，只删掉他那一行公钥就行。
 
 ---
 
@@ -215,7 +217,7 @@ IP、ssh 别名、账号密码和路径等，都放在本机的 `envs/<环境名
 - **指定环境**：所有 `ops/local/` 脚本的第一个参数都是环境名。也可以先 `export SWARM_ENV=lab`，之后就能省略。
 - **同步到 manager**：部署时，这份文件会同步到 manager 的 `$REMOTE_DIR/.env`（权限 600）。manager 上的服务通过 systemd 的 `EnvironmentFile` 读取它，集群内的脚本也读它。
 - **格式**：每行写 `KEY=VALUE`。**不能在行尾写注释**，systemd 不支持。
-- **修改后**：要重新执行 `deploy-host.sh` 才会生效；正在运行的服务还要加 `--restart`。改了共享的参数（比如 SSH 密码）时，要通知其他会部署的人同步修改自己的 env 文件。
+- **修改后**：要重新执行 `deploy_host.py` 才会生效；正在运行的服务还要加 `--restart`。改了共享的参数（比如 SSH 密码）时，要通知其他会部署的人同步修改自己的 env 文件。
 
 | 变量                                                                             | 用途                                                    |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -237,19 +239,18 @@ IP、ssh 别名、账号密码和路径等，都放在本机的 `envs/<环境名
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 换了树莓派、网卡，或者重刷了系统 | 在节点上执行 `cat /sys/class/net/eth0/address` 查新 MAC → 在路由器上把新 MAC 绑定到原来的 IP → 更新 env 里的 `*_MAC` → 重启节点，让它重新获取 IP                                                         |
 | 路由器被重置或者更换             | 按 env 里的 `*_MAC`、`*_IP` 重新添加 4 条地址保留                                                                                                                                                         |
-| 某个节点的 IP 已经变了           | 先改回原 IP（按上面两行处理）。如果确实要换 IP：修改 `envs/*.env` 和每个人的 `~/.ssh/config`，执行 `deploy-host.sh <环境> --restart` 和 `deploy-agents.sh`；manager 的 IP 变了还要重建 swarm             |
+| 某个节点的 IP 已经变了           | 先改回原 IP（按上面两行处理）。如果确实要换 IP：修改 `envs/*.env` 和每个人的 `~/.ssh/config`，执行 `deploy_host.py <环境> --restart` 和 `deploy_agents.py`；manager 的 IP 变了还要重建 swarm             |
 | 新增节点                         | 先在路由器上做好地址保留，再加入 swarm、打 label，在 env 和 `inventory.toml` 里登记                                                                                                                       |
 
 ### worker 磁盘
 
 - 容器的 `/app/data` 挂载的是 worker 上的 `/mnt/storage/collect_app_v8`。它**只是根分区上的一个普通目录**，不是单独的盘或分区，也没有配额，容器能写满整个 917G 根分区。
-- 各节点的"磁盘容量"（low 5G、middle 10G、high 25G）只是调度器里的数值约束，写在 [host/manager/docker_utils/hdd_config.json](host/manager/docker_utils/hdd_config.json)，调度时用来判断任务能不能放到某个节点，**容器本身不受限制**。
+- 各节点的"磁盘容量"（low 5G、middle 10G、high 25G）只是调度器里的数值约束，写在 [host/manager/swarm/worker_hdd_limits.json](host/manager/swarm/worker_hdd_limits.json)（8084 用），调度时用来判断任务能不能放到某个节点，**容器本身不受限制**。
 - worker 容器启动时会清空 `/app/data`，平时那个目录是空的。
-- worker-03 的 `/mnt/storage/test` 是一个 35G 的全零文件（2026-03-11），来源不明，没有被使用。
 
 ### ssh 访问与成员管理
 
-- 每个人用自己的 ssh 密钥，公钥加在 4 个节点的 `~pi/.ssh/authorized_keys` 里。新成员接入见[首次使用](#首次使用)。
+- 每个人用自己的 ssh 密钥，公钥加在 4 个节点的 `~pi/.ssh/authorized_keys` 里。新成员用 `uv run ops/local/make_access.py lab <成员名>` 开通，见[首次使用](#首次使用)。
 - **有人不再参与时：**
   1. 在 4 个节点上删掉他那一行公钥（行尾注释就是生成时 `-C` 写的 `<名字>@<机器名>`）：
      ```bash
@@ -258,7 +259,7 @@ IP、ssh 别名、账号密码和路径等，都放在本机的 `envs/<环境名
      done
      ```
   2. 在 GitHub 上移除他的 collaborator 权限。
-  3. 他手里有 `lab.env`，里面有 `NODE_SSH_PASSWORD` 等密码。需要的话修改这些密码，更新自己的 env 文件，执行 `deploy-host.sh lab --restart`，并通知其他成员同步修改。
+  3. 他手里有 `lab.env`，里面有 `NODE_SSH_PASSWORD` 等密码。需要的话修改这些密码，更新自己的 env 文件，执行 `deploy_host.py lab --restart`，并通知其他成员同步修改。
 - **不要共用一把私钥**：没法单独撤销某个人的权限，也查不出是谁部署的。
 
 ---
@@ -287,7 +288,7 @@ stack 名是 `collect_data_stack`，定义在 [image/stack/collect_data_stack.ym
 看**镜像 digest + stack yaml**，不要只看 tag。`collect_data_app:v8` 这个 tag 前后被覆盖过 7 次（v8.1–v8.7），各版本的区别和镜像 ID 见 [image/versions/README.md](image/versions/README.md)。
 
 ```bash
-ops/local/remote.sh lab check-stack.sh                       # stack 和 service 状态
+uv run ops/local/remote.py lab check-stack.sh                       # stack 和 service 状态
 ssh Worker-Node-1 'sudo docker inspect $(sudo docker ps -q --filter name=collect_data_stack | head -1) --format "{{.Image}}"'
 ```
 
@@ -295,22 +296,22 @@ ssh Worker-Node-1 'sudo docker inspect $(sudo docker ps -q --filter name=collect
 
 ### 常用操作
 
-都在 manager 上执行，从开发机用 `remote.sh` 调用。**这些操作会影响所有正在跑的实验，执行前先确认没有人在采集数据。**
+都在 manager 上执行，从开发机用 `remote.py` 调用。**这些操作会影响所有正在跑的实验，执行前先确认没有人在采集数据。**
 
 | 操作                      | 命令                                          | 说明                                                                                  |
 | ------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
-| 查看 stack                | `ops/local/remote.sh lab check-stack.sh`      |                                                                                       |
-| 部署或更新 stack          | `ops/local/remote.sh lab stack-start.sh`      | 用 env 里的 `STACK_COMPOSE`，即本仓库的 `collect_data_stack.yml`                      |
-| 删除 stack                | `ops/local/remote.sh lab stack-stop.sh`       | 3 个 worker 容器都会停                                                                |
-| 构建并推送镜像            | `ops/local/remote.sh lab build-image.sh v9`   | 必须给新 tag，已存在的 tag 拒绝覆盖；推送后打印 digest，见[发布新的 worker 版本](#发布新的-worker-版本) |
-| 重建 swarm                | `ops/local/remote.sh lab rebuild-swarm.sh`    | 交互式，要输入各 worker 的密码；会自动按 `inventory.toml` 恢复节点 label，再部署 stack |
+| 查看 stack                | `uv run ops/local/remote.py lab check-stack.sh`      |                                                                                       |
+| 部署或更新 stack          | `uv run ops/local/remote.py lab stack-start.sh`      | 用 env 里的 `STACK_COMPOSE`，即本仓库的 `collect_data_stack.yml`                      |
+| 删除 stack                | `uv run ops/local/remote.py lab stack-stop.sh`       | 3 个 worker 容器都会停                                                                |
+| 构建并推送镜像            | `uv run ops/local/remote.py lab build-image.sh v9`   | 必须给新 tag，已存在的 tag 拒绝覆盖；推送后打印 digest，见[发布新的 worker 版本](#发布新的-worker-版本) |
+| 重建 swarm                | `uv run ops/local/remote.py lab rebuild-swarm.sh`    | 交互式，要输入各 worker 的密码；会自动按 `inventory.toml` 恢复节点 label，再部署 stack |
 | 给节点打 label            | `ssh Manager-Node 'docker node update --label-add type=low worker-01'` | 重新加入 swarm 的节点没有 label，服务会一直 pending                       |
 
 ### 发布新的 worker 版本
 
-1. 修改 [image/worker-app/app.py](image/worker-app/app.py)，提交、推送、`deploy-host.sh`。
-2. `ops/local/remote.sh lab build-image.sh v9`：构建并推送**新 tag**，脚本会打印 digest。
-3. 把 env 里的 `DOCKER_IMAGE` 改成新 tag，`collect_data_stack.yml` 里的 digest 改成新的，提交、推送、`deploy-host.sh`，再 `stack-start.sh`。
+1. 修改 [image/worker-app/app.py](image/worker-app/app.py)，提交、推送、`deploy_host.py`。
+2. `uv run ops/local/remote.py lab build-image.sh v9`：构建并推送**新 tag**，脚本会打印 digest。
+3. 把 env 里的 `DOCKER_IMAGE` 改成新 tag，`collect_data_stack.yml` 里的 digest 改成新的，提交、推送、`deploy_host.py`，再 `stack-start.sh`。
 4. 在 [image/versions/](image/versions/) 里补上这个版本的记录。
 
 ---
@@ -321,7 +322,7 @@ ssh Worker-Node-1 'sudo docker inspect $(sudo docker ps -q --filter name=collect
 
 ```mermaid
 flowchart TD
-  P["git pull"] --> M["本机修改、自测"] --> CM["git commit"] --> PS["git push"] --> D["ops/local/deploy-host.sh lab"]
+  P["git pull"] --> M["本机修改、自测"] --> CM["git commit"] --> PS["git push"] --> D["uv run ops/local/deploy_host.py lab"]
   D --> K1{"工作区干净？"}
   K1 -- 否 --> X1["拒绝：先提交<br>（临时调试可加 --force）"]
   K1 -- 是 --> K2{"HEAD 已推送到 origin？"}
@@ -340,7 +341,7 @@ git pull                             # 1. 先拉取：别人可能已经部署�
 # 2. 在本机修改、自测
 git add -A && git commit -m "..."    # 3. 提交
 git push                             # 4. 推送：部署脚本只接受已推送的提交
-ops/local/deploy-host.sh lab         # 5. 部署（改了哪部分对应哪个命令，见下面的表）
+uv run ops/local/deploy_host.py lab         # 5. 部署（改了哪部分对应哪个命令，见下面的表）
 ```
 
 部署后看运维界面 `http://$MANAGER_IP:5000/` 的页头，显示的提交号应该是你刚推送的那个。
@@ -350,7 +351,7 @@ ops/local/deploy-host.sh lab         # 5. 部署（改了哪部分对应哪个�
 ### 调试还没提交的代码
 
 ```bash
-ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括未提交的改动）
+uv run ops/local/deploy_host.py lab --force   # 部署工作区当前的内容（包括未提交的改动）
 ```
 
 `--force` 会跳过所有部署前检查，只用于临时调试。部署记录里写的仍然是 HEAD 的提交号，所以调试完一定要提交、推送，再正常部署一次，让 manager 上的代码和 git 一致。
@@ -359,18 +360,18 @@ ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括
 
 | 改了什么                                 | 怎么部署                                                                       | 说明                                                                                            |
 | ---------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| 运维界面 `ops/cluster/ui/`（前端或后端） | `ops/local/deploy-host.sh lab`                                                 | 每次部署都会自动重启运维界面，刷新浏览器即可                                                    |
-| 调度器和采集器 `host/manager/`           | `ops/local/deploy-host.sh lab --restart`                                       | 会重启正在运行的采集器。没在运行的，下次在运维界面启动时就是新代码                              |
-| systemd unit `ops/cluster/systemd/`      | `ops/local/deploy-host.sh lab`，正在运行的服务还要加 `--restart`               | 脚本会提示哪些服务需要重启；被替换的旧 unit 会备份到 manager 的 `~/swarm-bak/systemd/<时间戳>/` |
-| `inventory.toml`                         | `ops/local/deploy-host.sh lab`                                                 | 运维界面每次请求都会重新读取                                                                    |
-| Python 依赖 `pyproject.toml`             | 先执行 `uv lock`，把 `uv.lock` 一起提交，再 `deploy-host.sh lab --restart`     | manager 上的 `uv sync` 用的是 `--frozen`，锁文件没提交会报错                                    |
-| 节点 agent `ops/cluster/agent/`          | `ops/local/deploy-agents.sh lab`                                               | 部署到所有节点；只部署某几个节点：`deploy-agents.sh lab Worker-Node-1 Worker-Node-2`            |
-| 集群内脚本 `ops/cluster/bin/`            | 先 `deploy-host.sh lab`，再执行 `ops/local/remote.sh lab <脚本名>`             | 见[集群内脚本](#集群内脚本)                                                                     |
+| 运维界面 `ops/cluster/ui/`（前端或后端） | `uv run ops/local/deploy_host.py lab`                                                 | 每次部署都会自动重启运维界面，刷新浏览器即可                                                    |
+| 调度器和采集器 `host/manager/`           | `uv run ops/local/deploy_host.py lab --restart`                                       | 会重启正在运行的采集器。没在运行的，下次在运维界面启动时就是新代码                              |
+| systemd unit `ops/cluster/systemd/`      | `uv run ops/local/deploy_host.py lab`，正在运行的服务还要加 `--restart`               | 脚本会提示哪些服务需要重启；被替换的旧 unit 会备份到 manager 的 `~/swarm-bak/systemd/<时间戳>/` |
+| `inventory.toml`                         | `uv run ops/local/deploy_host.py lab`                                                 | 运维界面每次请求都会重新读取                                                                    |
+| Python 依赖 `pyproject.toml`             | 先执行 `uv lock`，把 `uv.lock` 一起提交，再 `deploy_host.py lab --restart`     | manager 上的 `uv sync` 用的是 `--frozen`，锁文件没提交会报错                                    |
+| 节点 agent `ops/cluster/agent/`          | `uv run ops/local/deploy_agents.py lab`                                               | 部署到所有节点；只部署某几个节点：`deploy_agents.py lab Worker-Node-1 Worker-Node-2`            |
+| 集群内脚本 `ops/cluster/bin/`            | 先 `deploy_host.py lab`，再执行 `uv run ops/local/remote.py lab <脚本名>`             | 见[集群内脚本](#集群内脚本)                                                                     |
 | worker 镜像、stack `image/`              | 见[发布新的 worker 版本](#发布新的-worker-版本)                                |                                                                                                 |
 | 客户端 `clients/`                        | 不用部署                                                                       | 在本机运行：`SWARM_ENV=lab uv run python clients/load-client/client.py`                         |
-| 环境参数 `envs/lab.env`                  | `deploy-host.sh lab`，正在运行的服务还要加 `--restart`                         | 这个文件不进 git                                                                                |
+| 环境参数 `envs/lab.env`                  | `deploy_host.py lab`，正在运行的服务还要加 `--restart`                         | 这个文件不进 git                                                                                |
 
-### `deploy-host.sh` 做了什么
+### `deploy_host.py` 做了什么
 
 1. **检查**：工作区是否干净、HEAD 是否已推送、manager 上已部署的提交是不是 HEAD 的祖先（见[多人协作](#多人协作)）。
 2. **同步**：把代码同步到 manager 的 `$REMOTE_DIR`，同时同步环境参数，生成 `$REMOTE_DIR/.env`。
@@ -411,7 +412,7 @@ ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括
 
 | 运行位置   | 安装命令                                                                                        |
 | ---------- | ----------------------------------------------------------------------------------------------- |
-| manager    | `uv sync --no-default-groups --group host --group algo --group ui`（`deploy-host.sh` 自动执行） |
+| manager    | `uv sync --no-default-groups --group host --group algo --group ui`（`deploy_host.py` 自动执行） |
 | 客户端机器 | `uv sync --no-default-groups --group client`                                                    |
 | 开发机     | `uv sync`（装 host、ui、client）；要用算法依赖时执行 `uv sync --all-groups`                     |
 
@@ -450,25 +451,25 @@ Python 版本锁定为 3.11，和 manager 系统的 Python 3.11.2 保持一致�
 | -------------- | ---------------- | ------- | ---------------------------------------------------------------- | ------------------ |
 | 5000           | `swarm-lb-ops`   | soar009 | 运维界面 `ops/cluster/ui/server.py`                              | 是                 |
 | 9100           | `swarm-lb-agent` | soar009 | 节点 agent，每个节点一份                                         | 是                 |
-| 8080           | `collect_8080`   | soar009 | `p8080_sched.py`：调度器（DQN / direct / sd_min / min_min / RR） | 否，需要时手动启动 |
-| 8081           | `collect_8081`   | user01  | `p8081_sched_v2.py`：调度器 v2（RL_MOTS / Ablation / algor_set）。启停前先问 user01 | 否    |
-| 8082           | `collect_8082`   | soar009 | `p8082_collect_rr.py`：XGB 数据采集 · Round Robin                | 是                 |
-| 8083           | `collect_8083`   | soar009 | `p8083_collect_lstt.py`：XGB 数据采集 · Least Time               | 是                 |
-| 8084           | `collect_8084`   | soar009 | `p8084_collect_hdd_rr.py`：XGB 数据采集 · handle_hdd v2（RR）    | 是                 |
+| 8080           | `collect_8080`   | soar009 | `scheduler_single.py`：单任务调度器                              | 否，需要时手动启动 |
+| 8081           | `collect_8081`   | user01  | `scheduler_batch.py`：批量调度器。启停前先问 user01              | 否                 |
+| 8082           | `collect_8082`   | soar009 | `collector_rr.py`：训练数据采集 · 轮询                           | 是                 |
+| 8083           | `collect_8083`   | soar009 | `collector_lstt.py`：训练数据采集 · LSTT                         | 是                 |
+| 8084           | `collect_8084`   | soar009 | `collector_hdd_tier.py`：训练数据采集 · 按磁盘档位               | 是                 |
 | 8080（worker） | swarm 服务       | soar009 | worker 容器 `image/worker-app/app.py`                            | 由 swarm 管理      |
 
-8080、8081 用 `objects.py`，8082、8083 也用 `objects.py`，8084 用 `objects_hdd.py`。停用的旧版本在 [host/archive/](host/archive/)。
+各文件做什么见[目录](#目录)里的 `host/manager/` 表。停用的旧版本在 [host/archive/](host/archive/)。
 
 ### 集群内脚本
 
-`ops/cluster/bin/` 里的脚本在 manager 上运行，从开发机通过 `remote.sh` 调用：
+`ops/cluster/bin/` 里的脚本在 manager 上运行，从开发机通过 `remote.py` 调用：
 
 ```bash
-ops/local/remote.sh lab                         # 列出全部脚本
-ops/local/remote.sh lab check-queue.sh 8084     # 查询某个采集器的任务队列
-ops/local/remote.sh lab check-stack.sh          # 查看 stack 和 service 状态
-ops/local/remote.sh lab list-collect-units.sh   # 列出采集器的 systemd 状态
-ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
+uv run ops/local/remote.py lab                         # 列出全部脚本
+uv run ops/local/remote.py lab check-queue.sh 8084     # 查询某个采集器的任务队列
+uv run ops/local/remote.py lab check-stack.sh          # 查看 stack 和 service 状态
+uv run ops/local/remote.py lab list-collect-units.sh   # 列出采集器的 systemd 状态
+uv run ops/local/remote.py lab --sudo setup-udisk.sh   # 以 root 运行
 ```
 
 stack 和镜像相关的脚本见[第二部分的常用操作](#常用操作)。启停或重启单个服务，最方便的是用运维界面。也可以直接在 manager 上执行 `sudo systemctl start|stop|restart <unit>`。
@@ -501,9 +502,9 @@ stack 和镜像相关的脚本见[第二部分的常用操作](#常用操作)。
 
 ## 待办与注意
 
-- **2026-11-11 整理**：8081、8083 已迁入本仓库运行；manager 脚本按端口改名（`p8080_sched.py` 等），unit `collect_8082_rr` 改名为 `collect_8082`；停用的代码移到 `host/archive/`；worker 镜像历史整理到 `image/versions/`。
+- **2026-11-11 整理**：8081、8083 已迁入本仓库运行；`host/manager/` 按内容改名（`scheduler_*`、`collector_*`、`algorithms/`、`swarm/` 等，见[目录](#目录)），unit `collect_8082_rr` 改名为 `collect_8082`；开发机脚本改写为 Python（`ops/local/*.py`），Windows 不再需要 Git Bash；停用的代码移到 `host/archive/`；worker 镜像历史整理到 `image/versions/`。
 - **2026-11-11 stack 和镜像改用本仓库**：`STACK_COMPOSE` 改为 `image/stack/collect_data_stack.yml`，`DOCKER_BUILD_DIR` 改为 `image/worker-app`，去掉了 `REBUILD_COMPOSE`（原来指向 v5 时期的旧配置）。`rebuild-swarm.sh` 改为部署同一个 stack 并恢复节点 label；`build-image.sh` 不再覆盖已有 tag。**其他人要同步修改自己的 `envs/lab.env`**（这三行，见 `example.env`）。
 - **用本仓库重新构建的镜像和 v8.7 不完全相同**：v8.7 是 `pip install` 不锁版本装的（aiohttp 3.13.3），本仓库的 `uv.lock` 是 aiohttp 3.14.5。只影响以后新构建的镜像，线上按 digest 锁定在 v8.7 不受影响。
-- **3 份 `hdd_config.json` 的内存值不一致**：实际生效的是 `host/manager/docker_utils/hdd_config.json`（只有磁盘值）；`clients/load-client/hdd_config.json` 里 worker-02 写的是 1G，线上是 2G。
+- **3 份 `hdd_config.json` 的内存值不一致**：实际生效的是 `host/manager/swarm/worker_hdd_limits.json`（只有磁盘值）；`clients/load-client/hdd_config.json` 里 worker-02 写的是 1G，线上是 2G。
 - **安全**：2026-11-04 重写过 git 历史，去掉了明文密码和 IP。但仓库公开期间可能已经被别人拿到，建议修改各节点 `pi` 用户的密码，并同步更新 env 文件。
 - **路由器**：还没有确认路由器上确实做了 4 条 DHCP 地址保留，也还没有记录谁有后台权限。确认后在这里写上负责人（不写密码）。

@@ -4,7 +4,7 @@ GET /metrics.json  → 当前快照（CPU/内存/温度/降频/磁盘/网络/IO/
 GET /healthz       → ok
 
 每 SAMPLE_S 秒采样一次，速率类指标按两次采样差值计算。只读，不做任何写操作。
-部署：deploy/deploy-agents.sh（systemd: swarm-lb-agent.service，端口 9100）
+部署：uv run ops/local/deploy_agents.py（systemd: swarm-lb-agent.service，端口 9100）
 """
 from __future__ import annotations
 

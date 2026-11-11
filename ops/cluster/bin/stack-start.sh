@@ -1,5 +1,5 @@
 #!/bin/bash
-# 【集群内执行·manager】从开发机调用：ops/local/remote.sh <环境名> stack-start.sh
+# 【集群内执行·manager】从开发机调用：uv run ops/local/remote.py <环境名> stack-start.sh
 # 参数来自 .env：STACK_NAME / STACK_COMPOSE / DOCKER_IMAGE
 set -e
 source "$(dirname "$0")/../../lib.sh"

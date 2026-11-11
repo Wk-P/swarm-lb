@@ -57,7 +57,7 @@ def get_hdd_limit(service_name: str, hostname:str, port: int, node_label: str) -
         intege number: The HDD limit in MB for the worker, or None if not found.
     """
     limit = {}
-    path = Path(__file__).parent / 'hdd_config.json'
+    path = Path(__file__).parent / 'worker_hdd_limits.json'
     try:
         hdd_data = pd.read_json(path)
         # find the hdd limit for the service

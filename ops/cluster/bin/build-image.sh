@@ -1,5 +1,5 @@
 #!/bin/bash
-# 【集群内执行·manager】从开发机调用：ops/local/remote.sh <环境名> build-image.sh <新tag>
+# 【集群内执行·manager】从开发机调用：uv run ops/local/remote.py <环境名> build-image.sh <新tag>
 # 构建并推送 worker 镜像。参数来自 .env：DOCKER_BUILD_DIR（本仓库 image/worker-app）/ DOCKER_IMAGE
 #
 # 必须给一个新 tag（如 v9）。已经存在的 tag 拒绝覆盖：同一个 tag 被覆盖后就分不清容器跑的是哪个版本

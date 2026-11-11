@@ -1,5 +1,5 @@
-# 由 swarm-lb 仓库管理：ops/cluster/systemd/swarm-lb-ops.service  (ops/local/deploy-host.sh 安装)
-# 模板：@变量名@ 占位符由 ops/lib.sh 的 render 用环境参数替换
+# 由 swarm-lb 仓库管理：ops/cluster/systemd/swarm-lb-ops.service  (uv run ops/local/deploy_host.py 安装)
+# 模板：@变量名@ 占位符由 ops/local/common.py 的 render 用环境参数替换
 [Unit]
 Description=swarm-lb ops UI (:5000) [soar009]
 After=network-online.target docker.service

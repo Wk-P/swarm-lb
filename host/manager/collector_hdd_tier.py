@@ -1,11 +1,13 @@
-# p8084_collect_hdd_rr.py（原 manager_xgbdata_collector_handle_hdd_v2.py）
+# collector_hdd_tier.py —— 8084 训练数据采集 · 按磁盘档位（原 manager_xgbdata_collector_handle_hdd_v2.py）
+# 请求带 HDD 档位时，选能容纳该档位的最小 worker；否则轮询，磁盘放不下就改派。
+# 资源上限读 swarm/worker_hdd_limits.json（不 SSH）。
 # Data collection manager with task queuing and scheduling
 
 from aiohttp import web
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from copy import deepcopy
-from objects_hdd import ServerManager
+from worker_manager_static import ServerManager
 import asyncio  
 import aiohttp
 import traceback

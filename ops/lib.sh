@@ -1,11 +1,12 @@
-# swarm-lb 运维脚本公共部分（本机 ops/local/ 和集群内 ops/cluster/bin/ 共用）。
+# swarm-lb 集群内运维脚本（ops/cluster/bin/，在 manager 上运行）的公共部分。
+# 开发机上的脚本是 Python（ops/local/*.py），公共部分在 ops/local/common.py。
 #
 #   source "<仓库>/ops/lib.sh"
 #   load_env [环境名]
 #
 # 加载顺序：
 #   1. 指定了环境名（参数或 $SWARM_ENV）  → envs/<环境名>.env       （开发机）
-#   2. 否则仓库根目录有 .env             → .env                    （集群节点上，由 deploy-host.sh 同步）
+#   2. 否则仓库根目录有 .env             → .env                    （集群节点上，由 deploy_host.py 同步）
 # 都没有就报错退出。
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

@@ -1,4 +1,6 @@
-# manager_sw.py 
+# scheduler_single.py —— 8080 单任务调度器（原 manager_hmsw.py）
+# 每个请求：用 XGBoost 模型（model/single_xgb.joblib）预测各 worker 的响应时间，
+# 再按请求指定的算法（algor1=峰值 MILP、algor2=均衡 MILP、dqn、round_robin、min-min）选一个 worker 转发。
 # single worker node
 
 from aiohttp import web
@@ -6,7 +8,7 @@ from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from copy import deepcopy
 
-from objects import ServerManager, ManagerResponse
+from worker_manager import ServerManager, ManagerResponse
 import asyncio
 import traceback
 import aiohttp
@@ -17,13 +19,13 @@ import numpy as np
 import time
 import logging
 
-import LB_algorithm.double_dqn as DQN               
-import LB_algorithm.direct as algor1               
-import LB_algorithm.sd_min as algor2                
-import LB_algorithm.min_min as min_min              
-import LB_algorithm.round_robin as round_robin      
+import algorithms.single.double_dqn as DQN               
+import algorithms.single.peak_milp as algor1               
+import algorithms.single.balance_milp as algor2                
+import algorithms.single.min_min as min_min              
+import algorithms.single.round_robin as round_robin      
 
-model_path = Path(__file__).parent / "model" / "xgb4_1.joblib"
+model_path = Path(__file__).parent / "model" / "single_xgb.joblib"
 if model_path.exists():
     xgb_model = joblib.load(model_path)
 else:

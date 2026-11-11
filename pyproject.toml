@@ -7,7 +7,7 @@ readme = "README.md"
 requires-python = "==3.11.*"
 
 # 不设公共依赖：按"代码在哪运行"分组安装（一份 uv.lock）
-#   集群宿主机 manager：uv sync --no-default-groups --group host --group algo --group ui   （deploy-host.sh 自动执行）
+#   集群宿主机 manager：uv sync --no-default-groups --group host --group algo --group ui   （deploy_host.py 自动执行）
 #   集群外客户端机器：  uv sync --no-default-groups --group client
 #   开发机：            uv sync --all-groups
 #   docker 镜像（image/worker-app/）有自己的 pyproject，不在这里
@@ -27,7 +27,7 @@ ui = [
     "aiohttp==3.11.6",
     "docker==7.1.0",
 ]
-# 8080/8081 调度器（p8080_sched.py、p8081_sched_v2.py）及 LB_algorithm/model 所需（DQN、gurobi、xgboost 预测）
+# 8080/8081 调度器（scheduler_single.py、scheduler_batch.py）及 algorithms/、model/ 所需（DQN、gurobi、xgboost 预测）
 algo = [
     "numpy==2.1.3",
     "joblib==1.4.2",
@@ -47,5 +47,5 @@ client = [
 
 [tool.uv]
 package = false
-# 不带参数的 uv sync（开发机）装除 algo 以外的全部；manager 由 deploy-host.sh 显式指定分组
+# 不带参数的 uv sync（开发机）装除 algo 以外的全部；manager 由 deploy_host.py 显式指定分组
 default-groups = ["host", "ui", "client"]

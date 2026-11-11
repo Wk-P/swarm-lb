@@ -1,12 +1,14 @@
-# p8083_collect_lstt.py（原 manager_xgbdata_collecter_lstt.py）
+# collector_rr.py —— 8082 训练数据采集 · 轮询（原 manager_xgbdata_collecter_rr.py）
+# 任务进队列，按轮询预先指定 worker；超过该 worker 容量就按它的容量拆分。资源上限通过 SSH 实测。
 # Data collection manager with task queuing and scheduling
 
 from aiohttp import web
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from copy import deepcopy
-from objects import ServerManager
+from worker_manager import ServerManager
 import asyncio  
+import aiohttp
 import traceback
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
@@ -83,9 +85,20 @@ class TaskScheduler:
         self.task_counter = 0
         self.running = False
         
-        # Initialize worker status (all start as IDLE)
+        # Initialize worker status
+        # Check SSH connection status for each worker
         for i in range(len(manager.workers)):
-            self.worker_status[i] = WorkerStatus.IDLE
+            if i < len(manager.worker_ssh_clients):
+                ssh_client = manager.worker_ssh_clients[i]
+                if hasattr(ssh_client, 'connection_failed') and ssh_client.connection_failed:
+                    self.worker_status[i] = WorkerStatus.UNAVAILABLE
+                    logger.warning(f"[Scheduler] Worker {i} initialized as UNAVAILABLE (SSH connection failed)")
+                else:
+                    self.worker_status[i] = WorkerStatus.IDLE
+            else:
+                # Worker exists but no SSH client - mark as UNAVAILABLE
+                self.worker_status[i] = WorkerStatus.UNAVAILABLE
+                logger.warning(f"[Scheduler] Worker {i} initialized as UNAVAILABLE (no SSH client)")
     
     def generate_task_id(self) -> str:
         """Generate unique task ID"""
@@ -107,10 +120,21 @@ class TaskScheduler:
         if worker_index >= len(self.manager.workers):
             return False
         
+        # Check if SSH client exists for this worker
+        if worker_index >= len(self.manager.worker_ssh_clients):
+            logger.warning(f"[Scheduler] No SSH client for worker {worker_index}")
+            return False
+        
         RESOURCE_LIMIT_FACTOR = 0.6  # Only allow tasks using up to 60% of worker limit
         
         # Get real-time limits from SSH monitoring (convert HDD from bytes to MB)
         worker_ssh_client = self.manager.worker_ssh_clients[worker_index]
+        
+        # Check if monitoring data is available
+        if worker_ssh_client.max_mem_usage == 0 or worker_ssh_client.max_hdd_usage == 0:
+            logger.warning(f"[Scheduler] Worker {worker_index} resource data not ready")
+            return False
+        
         worker_mem_limit = worker_ssh_client.max_mem_usage * RESOURCE_LIMIT_FACTOR
         worker_hdd_limit = (worker_ssh_client.max_hdd_usage / (1024 * 1024)) * RESOURCE_LIMIT_FACTOR
         
@@ -143,50 +167,195 @@ class TaskScheduler:
         
         return None
     
-    async def split_task(self, task: Task, required: Dict[str, float]) -> List[Task]:
-        """Split task based on MINIMUM worker capacity across all workers (SCHEME 2 - LSTT)
-        Sub-tasks are NOT pre-assigned to workers, will be dynamically scheduled.
+    async def check_worker_health(self, worker_index: int) -> bool:
+        """Check if a specific worker is healthy by sending a health check request
+        
+        Args:
+            worker_index: Worker index to check
+            
+        Returns:
+            True if worker is healthy, False otherwise
+        """
+        try:
+            worker = self.manager.workers[worker_index]
+            worker_url = worker["url"]
+            session = self.manager.http_clients[worker_index]
+            
+            # Try to connect to worker's root endpoint with short timeout
+            timeout = aiohttp.ClientTimeout(total=3, connect=1)
+            async with session.get(f"{worker_url}/", timeout=timeout) as resp:
+                return resp.status in [200, 404]  # 404 is ok, means service is up but no root handler
+                
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            logger.warning(f"[Scheduler] Worker {worker_index} health check failed: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"[Scheduler] Unexpected error checking worker {worker_index}: {e}")
+            return False
+    
+    async def update_worker_status_from_health(self, worker_index: int, is_healthy: bool):
+        """Update worker status based on health check result
+        
+        Args:
+            worker_index: Worker index
+            is_healthy: Health check result
+        """
+        old_status = self.worker_status[worker_index]
+        
+        if is_healthy:
+            # Worker is healthy
+            if old_status == WorkerStatus.UNAVAILABLE:
+                # Worker recovered from unavailable state
+                self.worker_status[worker_index] = WorkerStatus.IDLE
+                logger.info(f"[Scheduler] Worker {worker_index} recovered: UNAVAILABLE -> IDLE")
+            elif old_status == WorkerStatus.BUSY:
+                # Keep BUSY status (task is running)
+                pass
+        else:
+            # Worker is unhealthy
+            if old_status != WorkerStatus.UNAVAILABLE:
+                self.worker_status[worker_index] = WorkerStatus.UNAVAILABLE
+                logger.warning(f"[Scheduler] Worker {worker_index} marked as UNAVAILABLE (was {old_status.value})")
+    
+    async def health_check_loop(self, check_interval: float = 10.0):
+        """Periodic health check loop for all workers
+        
+        Args:
+            check_interval: Seconds between health checks (default 10s)
+        """
+        logger.info(f"[Scheduler] Health check loop started (interval={check_interval}s)")
+        
+        while self.running:
+            try:
+                # Check all workers
+                health_tasks = []
+                for worker_index in range(len(self.manager.workers)):
+                    health_tasks.append(self.check_worker_health(worker_index))
+                
+                # Run all health checks concurrently
+                health_results = await asyncio.gather(*health_tasks, return_exceptions=True)
+                
+                # Update worker status based on results
+                for worker_index, result in enumerate(health_results):
+                    if isinstance(result, bool):
+                        await self.update_worker_status_from_health(worker_index, result)
+                    else:
+                        # Exception occurred
+                        logger.error(f"[Scheduler] Health check exception for worker {worker_index}: {result}")
+                        await self.update_worker_status_from_health(worker_index, False)
+                
+                # Wait before next check
+                await asyncio.sleep(check_interval)
+                
+            except Exception as e:
+                logger.error(f"[Scheduler] Error in health check loop: {e}")
+                traceback.print_exc()
+                await asyncio.sleep(check_interval)
+        
+        logger.info("[Scheduler] Health check loop stopped")
+    
+    async def service_discovery_loop(self, discovery_interval: float = 30.0):
+        """Periodic service discovery loop to detect new/removed services
+        
+        Args:
+            discovery_interval: Seconds between discoveries (default 30s)
+        """
+        logger.info(f"[Scheduler] Service discovery loop started (interval={discovery_interval}s)")
+        
+        while self.running:
+            try:
+                await asyncio.sleep(discovery_interval)
+                
+                # Refresh workers list
+                changes = await self.manager.refresh_workers()
+                
+                # Handle added workers
+                if changes['added']:
+                    logger.info(f"[Scheduler] Detected {len(changes['added'])} new workers")
+                    
+                    # Update worker_status dict to include new workers
+                    current_worker_count = len(self.worker_status)
+                    new_worker_count = len(self.manager.workers)
+                    
+                    if new_worker_count > current_worker_count:
+                        for i in range(current_worker_count, new_worker_count):
+                            self.worker_status[i] = WorkerStatus.IDLE
+                            logger.info(f"[Scheduler] Added worker {i} with status IDLE")
+                        
+                        # Start monitoring tasks for new SSH clients
+                        for i in range(current_worker_count, len(self.manager.worker_ssh_clients)):
+                            ssh_client = self.manager.worker_ssh_clients[i]
+                            try:
+                                monitor_tasks = [
+                                    asyncio.create_task(ssh_client.mem_usage_handle()),
+                                    asyncio.create_task(ssh_client.hdd_usage_handle())
+                                ]
+                                # Store monitor tasks in app context (will be added in on_startup)
+                                logger.info(f"[Scheduler] Started monitoring tasks for new worker {i}")
+                            except Exception as e:
+                                logger.error(f"[Scheduler] Failed to start monitors for worker {i}: {e}")
+                
+                # Handle removed workers
+                if changes['removed']:
+                    logger.warning(f"[Scheduler] Detected {len(changes['removed'])} removed workers")
+                    # Note: We keep worker_status entries but mark them as UNAVAILABLE
+                    # The health check loop will handle status updates
+                
+            except Exception as e:
+                logger.error(f"[Scheduler] Error in service discovery loop: {e}")
+                traceback.print_exc()
+                await asyncio.sleep(discovery_interval)
+        
+        logger.info("[Scheduler] Service discovery loop stopped")
+    
+    async def split_task_and_assign(self, task: Task, required: Dict[str, float], target_worker_index: int) -> List[Task]:
+        """Split task based on TARGET worker's capacity and assign via round-robin (SCHEME 1)
         
         Args:
             task: Task to split
             required: Required resources already calculated
+            target_worker_index: Target worker index for capacity calculation
         
         Returns:
-            List of sub-tasks WITHOUT target_worker_index (dynamic assignment)
+            List of sub-tasks with pre-assigned target_worker_index
         """
         split_tasks = []
         
+        # Validate worker index
+        if target_worker_index >= len(self.manager.worker_ssh_clients):
+            logger.error(f"[Scheduler] Invalid worker index {target_worker_index} for split calculation")
+            return split_tasks
+        
         SAFETY_FACTOR = 0.5  # Use 50% of actual limit for safe task splitting
-        RESOURCE_LIMIT_FACTOR = 0.6  # Detection factor
         
-        # Find minimum limits across ALL workers (after applying detection factor)
-        min_mem_limit = float('inf')
-        min_hdd_limit = float('inf')
+        # Get TARGET worker's resource limits for split calculation
+        worker_ssh_client = self.manager.worker_ssh_clients[target_worker_index]
+        target_mem_limit = worker_ssh_client.max_mem_usage
+        target_hdd_limit = worker_ssh_client.max_hdd_usage / (1024 * 1024)
         
-        for worker_ssh_client in self.manager.worker_ssh_clients:
-            worker_mem = worker_ssh_client.max_mem_usage * RESOURCE_LIMIT_FACTOR
-            worker_hdd = (worker_ssh_client.max_hdd_usage / (1024 * 1024)) * RESOURCE_LIMIT_FACTOR
-            min_mem_limit = min(min_mem_limit, worker_mem)
-            min_hdd_limit = min(min_hdd_limit, worker_hdd)
+        # Check if resource data is available
+        if target_mem_limit == 0 and target_hdd_limit == 0:
+            logger.error(f"[Scheduler] Worker {target_worker_index} resource data not available for split")
+            return split_tasks
         
-        # Calculate split count based on minimum worker capacity
+        # Calculate split count based on TARGET worker capacity
         mem_splits = 1
         hdd_splits = 1
         
-        if required['mem_mb'] > 0 and min_mem_limit > 0:
-            safe_mem_limit = min_mem_limit * SAFETY_FACTOR
+        if required['mem_mb'] > 0 and target_mem_limit > 0:
+            safe_mem_limit = target_mem_limit * SAFETY_FACTOR
             mem_splits = math.ceil(required['mem_mb'] / safe_mem_limit)
         
-        if required['hdd_mb'] > 0 and min_hdd_limit > 0:
-            safe_hdd_limit = min_hdd_limit * SAFETY_FACTOR
+        if required['hdd_mb'] > 0 and target_hdd_limit > 0:
+            safe_hdd_limit = target_hdd_limit * SAFETY_FACTOR
             hdd_splits = math.ceil(required['hdd_mb'] / safe_hdd_limit)
         
         split_count = max(mem_splits, hdd_splits)
         split_count = min(split_count, 20)  # Cap at 20 to prevent excessive splitting
         
-        # Store minimum limits for response (min * SAFETY_FACTOR)
-        task.min_mem_limit_for_response = min_mem_limit * SAFETY_FACTOR
-        task.min_hdd_limit_for_response = min_hdd_limit * SAFETY_FACTOR
+        # Store minimum limits for response (will be used in handle_request)
+        task.min_mem_limit_for_response = target_mem_limit * SAFETY_FACTOR
+        task.min_hdd_limit_for_response = target_hdd_limit * SAFETY_FACTOR
         
         # Determine split reason
         if mem_splits > hdd_splits:
@@ -194,19 +363,23 @@ class TaskScheduler:
         else:
             task.split_reason = 'hdd'
         
-        logger.info(f"[Scheduler] Splitting task {task.task_id} into {split_count} sub-tasks (LSTT Scheme - Dynamic Assignment)")
-        logger.info(f"[Scheduler] Min worker limits (after {RESOURCE_LIMIT_FACTOR} factor): mem={min_mem_limit:.2f}MB, hdd={min_hdd_limit:.2f}MB")
+        logger.info(f"[Scheduler] Splitting task {task.task_id} into {split_count} sub-tasks (Round-Robin Scheme)")
+        logger.info(f"[Scheduler] Target worker-{target_worker_index} limits: mem={target_mem_limit:.2f}MB, hdd={target_hdd_limit:.2f}MB")
         logger.info(f"[Scheduler] Required: mem={required['mem_mb']}MB, hdd={required['hdd_mb']}MB")
         logger.info(f"[Scheduler] Split calculation: mem_splits={mem_splits}, hdd_splits={hdd_splits}, using {split_count} splits")
         logger.info(f"[Scheduler] Split reason: {task.split_reason} (with {int((1-SAFETY_FACTOR)*100)}% safety margin)")
         
-        # Create split tasks WITHOUT pre-assigning workers (dynamic assignment)
+        # Create split tasks and assign via round-robin
+        num_workers = len(self.manager.workers)
         for i in range(split_count):
+            # Get next worker in round-robin
+            target_worker = await self.manager.get_and_update_round_robin_index()
+            
             split_task = Task(
                 task_id=self.generate_task_id(),
                 task_index=f"{task.task_index}_split_{i}",
                 parent_task_id=task.task_id,
-                target_worker_index=None  # NO pre-assignment for LSTT scheme
+                target_worker_index=target_worker  # Assigned via round-robin
             )
             
             # Store in tasks dict immediately
@@ -240,8 +413,8 @@ class TaskScheduler:
             
             split_tasks.append(split_task)
             task.split_tasks.append(split_task.task_id)
-        
-        logger.info(f"[Scheduler] Created {split_count} sub-tasks without worker assignment (will be dynamically assigned)")
+            
+            logger.info(f"[Scheduler] Sub-task {split_task.task_id} assigned to worker-{target_worker}")
         
         task.status = TaskStatus.SPLIT
         return split_tasks
@@ -260,6 +433,19 @@ class TaskScheduler:
         last_error = None
         
         try:
+            # Validate worker index
+            if worker_index >= len(self.manager.workers):
+                task.error = f"Invalid worker index {worker_index}"
+                task.status = TaskStatus.FAILED
+                logger.error(f"[Scheduler] Task {task.task_id} failed: {task.error}")
+                return
+            
+            if worker_index >= len(self.manager.worker_ssh_clients):
+                task.error = f"No SSH client for worker {worker_index}"
+                task.status = TaskStatus.FAILED
+                logger.error(f"[Scheduler] Task {task.task_id} failed: {task.error}")
+                return
+            
             # Mark worker as BUSY immediately
             self.worker_status[worker_index] = WorkerStatus.BUSY
             
@@ -292,8 +478,8 @@ class TaskScheduler:
             
             while retry_count <= max_retries:
                 try:
-                    # Set timeout: 10 minutes total, 2 minutes for connection
-                    timeout = aiohttp.ClientTimeout(total=600, connect=120)
+                    # Set timeout: 30 minutes total, 5 minutes for connection
+                    timeout = aiohttp.ClientTimeout(total=1800, connect=300)
                     
                     async with session.post(
                         f"{worker_url}/task/", 
@@ -365,25 +551,24 @@ class TaskScheduler:
                 
                 logger.info(f"[Scheduler] Processing task {task_id} from queue")
                 
-                # Dynamic assignment: find ANY idle worker (LSTT scheme)
-                idle_worker = None
-                required = task.get_required_resources()
+                # All tasks in queue have pre-assigned target_worker_index
+                if task.target_worker_index is None:
+                    logger.error(f"[Scheduler] Task {task_id} has no target worker assigned!")
+                    task.status = TaskStatus.FAILED
+                    task.error = "No target worker assigned"
+                    continue
                 
-                for worker_idx in range(len(self.manager.workers)):
-                    if self.worker_status[worker_idx] == WorkerStatus.IDLE:
-                        if self.check_worker_resources(worker_idx, required):
-                            idle_worker = worker_idx
-                            break
+                target_worker = task.target_worker_index
                 
-                if idle_worker is not None:
-                    # Found idle worker - assign and process immediately
-                    logger.info(f"[Scheduler] Dynamically assigning task {task_id} to worker-{idle_worker} (IDLE)")
-                    asyncio.create_task(self.process_task(task, idle_worker))
+                # Check if target worker is IDLE
+                if self.worker_status[target_worker] == WorkerStatus.IDLE:
+                    # Worker available - process task immediately
+                    logger.info(f"[Scheduler] Assigning task {task_id} to worker-{target_worker} (IDLE)")
+                    asyncio.create_task(self.process_task(task, target_worker))
                 else:
-                    # No idle worker available - re-queue and wait
-                    logger.debug(f"[Scheduler] No idle worker available, re-queuing task {task_id}")
+                    # Target worker is BUSY - re-queue and wait
+                    logger.debug(f"[Scheduler] Worker-{target_worker} BUSY, re-queuing task {task_id}")
                     await asyncio.sleep(0.5)  # Wait a bit before re-queue
-                    await self.task_queue.put(task_id)  # Wait a bit before re-queue
                     await self.task_queue.put(task_id)
             
             except Exception as e:
@@ -392,8 +577,8 @@ class TaskScheduler:
         
         logger.info("[Scheduler] Scheduler loop stopped")
     
-    async def wait_for_task_completion(self, task_id: str, timeout: float = 300.0) -> Task:
-        """Wait for task and its sub-tasks to complete (non-recursive)"""
+    async def wait_for_task_completion(self, task_id: str, timeout: float = 1800.0) -> Task:
+        """Wait for task and its sub-tasks to complete (non-recursive, default 30min timeout)"""
         task = self.tasks.get(task_id)
         if not task:
             raise ValueError(f"Task {task_id} not found")
@@ -529,33 +714,28 @@ async def handle_request(request: Request) -> Response:
         scheduler.tasks[task.task_id] = task
         task_id = task.task_id
         
-        # Check if task needs splitting BEFORE queuing (LSTT - based on minimum worker capacity)
+        # Check if task needs splitting BEFORE queuing
         required = task.get_required_resources()
+        target_worker_index = await scheduler.manager.get_and_update_round_robin_index()
         
-        # Find any worker to check if splitting is needed (use minimum across all)
-        needs_split = False
-        for worker_index in range(len(scheduler.manager.workers)):
-            if not scheduler.check_worker_resources(worker_index, required):
-                needs_split = True
-                break
-        
-        if needs_split:
-            # Task is too large - split immediately based on minimum capacity
-            logger.info(f"[Manager] Task {task_id} too large, splitting based on minimum worker capacity...")
-            split_tasks = await scheduler.split_task(task, required)
+        if not scheduler.check_worker_resources(target_worker_index, required):
+            # Task is too large for target worker - split immediately
+            logger.info(f"[Manager] Task {task_id} too large for worker-{target_worker_index}, splitting...")
+            split_tasks = await scheduler.split_task_and_assign(task, required, target_worker_index)
             
-            # Queue all sub-tasks WITHOUT target_worker_index (dynamic assignment)
+            # Queue all sub-tasks (each has pre-assigned target_worker_index)
             for st in split_tasks:
                 await scheduler.task_queue.put(st.task_id)
-                logger.info(f"[Manager] Sub-task {st.task_id} queued (no pre-assignment)")
+                logger.info(f"[Manager] Sub-task {st.task_id} queued for worker-{st.target_worker_index}")
         else:
-            # Task can fit - queue without assignment (will be assigned dynamically)
+            # Task can fit - assign target worker and queue
+            task.target_worker_index = target_worker_index
             await scheduler.task_queue.put(task.task_id)
-            logger.info(f"[Manager] Task {task_id} queued (no pre-assignment)")
+            logger.info(f"[Manager] Task {task_id} queued for worker-{target_worker_index}")
         
         # Wait for task completion
         try:
-            await scheduler.wait_for_task_completion(task_id, timeout=600.0)
+            await scheduler.wait_for_task_completion(task_id, timeout=1800.0)
         except TimeoutError as e:
             return web.json_response({
                 "error": 1,
@@ -587,7 +767,7 @@ async def handle_request(request: Request) -> Response:
             # Task was split - merge results
             merged_result = scheduler.merge_split_task_results(completed_task)
             
-            # Use stored minimum limits (min * SAFETY_FACTOR)
+            # Use stored minimum limits (target_worker * SAFETY_FACTOR)
             mem_limit = getattr(completed_task, 'min_mem_limit_for_response', None)
             hdd_limit = getattr(completed_task, 'min_hdd_limit_for_response', None)
             
@@ -733,6 +913,14 @@ async def on_startup(app: web.Application):
         scheduler_task = asyncio.create_task(scheduler.scheduler_loop())
         app['scheduler_task'] = scheduler_task
         
+        # Start health check loop
+        health_check_task = asyncio.create_task(scheduler.health_check_loop(check_interval=10.0))
+        app['health_check_task'] = health_check_task
+        
+        # Start service discovery loop
+        service_discovery_task = asyncio.create_task(scheduler.service_discovery_loop(discovery_interval=30.0))
+        app['service_discovery_task'] = service_discovery_task
+        
         # Create resource monitors
         monitors = []
         for ssh_client in manager.worker_ssh_clients:
@@ -770,6 +958,24 @@ async def on_cleanup(app: web.Application):
                 await scheduler_task
             except asyncio.CancelledError:
                 logger.info("[Manager] Scheduler task cancelled")
+        
+        # Cancel health check task
+        health_check_task: asyncio.Task = app.get('health_check_task')
+        if health_check_task:
+            health_check_task.cancel()
+            try:
+                await health_check_task
+            except asyncio.CancelledError:
+                logger.info("[Manager] Health check task cancelled")
+        
+        # Cancel service discovery task
+        service_discovery_task: asyncio.Task = app.get('service_discovery_task')
+        if service_discovery_task:
+            service_discovery_task.cancel()
+            try:
+                await service_discovery_task
+            except asyncio.CancelledError:
+                logger.info("[Manager] Service discovery task cancelled")
         
         manager: ServerManager = app.get('manager')
         monitor_tasks: List[asyncio.Task] = app.get('hm_monitors', [])
@@ -832,6 +1038,6 @@ def init_app():
 if __name__ == '__main__':
     try:
         app = init_app()
-        web.run_app(app, host='0.0.0.0', port=8083)
+        web.run_app(app, host='0.0.0.0', port=8082)
     except Exception as e:
         logger.error(f"[Manager] Error running app: {e}")

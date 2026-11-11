@@ -293,7 +293,7 @@ async def api_overview(request: web.Request) -> web.Response:
 
 
 def deploy_info() -> dict:
-    """deploy-host.sh 写下的部署记录：哪个提交、谁、何时部署的。"""
+    """deploy_host.py 写下的部署记录：哪个提交、谁、何时部署的。"""
     def read(name: str) -> str:
         try:
             return (ROOT / name).read_text(encoding="utf-8").strip()

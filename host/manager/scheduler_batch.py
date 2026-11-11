@@ -1,4 +1,6 @@
-# manager_sw.py
+# scheduler_batch.py —— 8081 批量调度器（原 manager_hmsw_v2.py，user01 使用）
+# 一次收一批任务，用多输出 XGBoost 模型（model/batch_xgb_multioutput.joblib）预测 任务×worker 时间矩阵，
+# 再按算法（algor1_set=峰值 MILP、algor2_set=均衡 MILP、RL-MOTS、Ablation）一次性分配并转发。
 # Batch scheduling version
 # - Receive one tasks list
 # - Schedule all tasks only once
@@ -10,7 +12,7 @@ from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 from copy import deepcopy
 
-from objects import ServerManager, ManagerResponse
+from worker_manager import ServerManager, ManagerResponse
 import asyncio
 import traceback
 import aiohttp
@@ -27,14 +29,14 @@ from typing import List, Dict, Any, Optional
 from aiohttp.web_response import StreamResponse
 import json
 
-from model.preprocess import preprocess_for_prediction_model
-from model.predict import predict_execution_time
+from model.batch_preprocess import preprocess_for_prediction_model
+from model.batch_predict import predict_execution_time
 
 
-import LB_algorithm.algor1_set as algor1_set
-import LB_algorithm.algor2_set as algor2_set
-import LB_algorithm.RL_MOTS as RL_MOTS
-import LB_algorithm.Ablation as Ablation
+import algorithms.batch.peak_milp as algor1_set
+import algorithms.batch.balance_milp as algor2_set
+import algorithms.batch.rl_mots as RL_MOTS
+import algorithms.batch.rl_mots_ablation as Ablation
 
 
 
@@ -43,7 +45,7 @@ import LB_algorithm.Ablation as Ablation
 # =========================================================
 # Model
 # =========================================================
-model_path = Path(__file__).parent / "model" / "v1" / "xgb_multioutput_model.joblib"
+model_path = Path(__file__).parent / "model" / "batch_xgb_multioutput.joblib"
 FEATURE_COLS = [
     'cpu_task_number',   # int
     'cpu_limit',         # float

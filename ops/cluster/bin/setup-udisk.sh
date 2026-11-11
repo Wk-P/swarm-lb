@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 【集群内执行·manager】从开发机调用：ops/local/remote.sh <环境名> --sudo setup-udisk.sh
+# 【集群内执行·manager】从开发机调用：uv run ops/local/remote.py <环境名> --sudo setup-udisk.sh
 # 测速 sdb(UDisk) vs sda(系统盘)，sdb 更快则格式化为 ext4 挂到 /mnt/udisk，
 # 否则恢复 swap 原样。会清空 /dev/sdb（已只读扫描确认无用户数据，仅 swap 残片）。
 set -euo pipefail
