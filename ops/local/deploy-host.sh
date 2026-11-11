@@ -11,10 +11,10 @@
 # 部署记录：$REMOTE_DIR/.deployed-rev（提交）、.deployed-by（谁、何时、从哪台机器）、.deployed-files（文件清单）
 #
 # 安全约束：
-#   - 只安装 ops/cluster/systemd/ 里、且在 inventory.toml 登记为 owner=[cluster].maintainer + managed=true 的 unit
+#   - 只安装 ops/cluster/systemd/ 里、且在 inventory.toml 登记为 managed=true 的 unit（不看 owner）
 #   - 被替换的旧 unit 先备份到 ~/swarm-bak/systemd/<时间戳>/
 #   - 只删除上次由本脚本部署、这次已不存在的文件（按 .deployed-files 清单）；.venv/.env 等不动
-#   - 不碰 ~/appv8、~/apps 及其 venv（8081 user01 服务仍在用）
+#   - 不碰 ~/appv8、~/apps 及其 venv（旧代码目录，已不再被任何 unit 使用，保留备查）
 #   - 不改变采集器的开机自启状态（需要时在 manager 上 systemctl enable/disable）
 set -euo pipefail
 source "$(dirname "$0")/../lib.sh"
@@ -99,15 +99,14 @@ cd $DEST
 ALLOWED=\$(.venv/bin/python - <<'PY'
 import tomllib
 inv = tomllib.load(open("inventory.toml", "rb"))
-me = inv["cluster"]["maintainer"]
-print(" ".join(s["unit"] for s in inv["service"] if s.get("owner") == me and s.get("managed")))
+print(" ".join(s["unit"] for s in inv["service"] if s.get("managed")))
 PY
 )
 TS=\$(date +%Y%m%d-%H%M%S)
 CHANGED=""
 for f in .rendered/systemd/*.service; do
   u=\$(basename "\$f")
-  case " \$ALLOWED " in *" \$u "*) ;; *) echo "  跳过 \$u（inventory 未登记为 maintainer 名下 + managed）"; continue;; esac
+  case " \$ALLOWED " in *" \$u "*) ;; *) echo "  跳过 \$u（inventory 未登记为 managed）"; continue;; esac
   dst=/etc/systemd/system/\$u
   if [ -f "\$dst" ] && cmp -s "\$f" "\$dst"; then echo "  \$u 未变化"; continue; fi
   if [ -f "\$dst" ]; then mkdir -p ~/swarm-bak/systemd/\$TS; cp "\$dst" ~/swarm-bak/systemd/\$TS/; fi

@@ -305,13 +305,13 @@ ops/local/deploy-host.sh lab --force   # 部署工作区当前的内容（包括
 2. **同步**：把代码同步到 manager 的 `$REMOTE_DIR`，同时同步环境参数，生成 `$REMOTE_DIR/.env`。
 3. **清理旧文件**：删除上次部署过、这次已经不存在的文件（按 `.deployed-files` 清单）。`.venv`、`.env` 和不是脚本部署的文件都不会动。
 4. **安装依赖**：`uv sync --frozen`，只装 manager 需要的 host、algo、ui 三组。
-5. **安装 unit**：在本机渲染 unit 模板，只安装 `inventory.toml` 里 `owner` 等于 `[cluster].maintainer`（目前是 `soar009`）且 `managed=true` 的 unit，然后重启运维界面。加了 `--restart` 时，还会重启正在运行的采集器。
+5. **安装 unit**：在本机渲染 unit 模板，只安装 `inventory.toml` 里登记为 `managed=true` 的 unit（不看 owner），然后重启运维界面。加了 `--restart` 时，还会重启正在运行的采集器。
 6. **记录**：写下 `.deployed-rev`（提交）和 `.deployed-by`（谁、什么时候、从哪台机器）。
 
 脚本**不会**做这些事：
 
 - 不改采集器的开机自启状态。需要时自己在 manager 上执行 `systemctl enable` 或 `disable`。
-- 不碰 `~/appv8`、`~/apps` 和它们的 venv，8081 还在用。
+- 不碰 `~/appv8`、`~/apps` 和它们的 venv。这是旧代码目录，已经没有 unit 在用，留着备查。
 
 ### 集群内运维
 
@@ -342,7 +342,7 @@ ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
   | manager 上的提交"不是 HEAD 的祖先" | 拒绝部署 | 别人在你之后部署过：先 `git pull` 合并，再部署 |
   | manager 上的提交"不在 origin 上" | 拒绝部署 | 有人部署了没推送的代码：在运维界面页头悬停看到部署人，让对方推送。**不要直接用 `--force` 覆盖** |
 - **查看当前部署**：看运维界面页头（悬停可以看到部署人和时间），或者执行 `ssh Manager-Node 'cat ~/swarm-lb/.deployed-rev ~/swarm-lb/.deployed-by'`。
-- **端口归属**：以 `inventory.toml` 为准。`owner` 直接写人名。只有 `owner` 等于 `[cluster].maintainer`（目前是 `soar009`）的服务能在运维界面启停、被部署脚本安装；其他人的服务（目前是 user01 的 8081）只能只读查看，任何脚本都不能修改它的 unit、venv 或代码目录。
+- **端口归属**：以 `inventory.toml` 为准。`owner` 直接写人名，只用来显示服务归谁。`managed = true` 的服务由本仓库管理：部署脚本安装它的 unit，运维界面可以启停。启停别人（`owner` 不等于 `[cluster].maintainer`，目前维护者是 `soar009`）的服务时会弹窗确认，**操作前先和对方打招呼**。没有 `managed` 的服务只能只读查看，任何脚本都不能修改它的 unit、venv 或代码目录。
 
 ## 回滚
 
@@ -359,7 +359,7 @@ ops/local/remote.sh lab --sudo setup-udisk.sh   # 以 root 运行
 | 5000           | `swarm-lb-ops`    | soar009 | 运维界面 `ops/cluster/ui/server.py`                          | 是                 |
 | 9100           | `swarm-lb-agent`  | soar009 | 节点 agent，每个节点一份                                     | 是                 |
 | 8080           | `collect_8080`    | soar009 | `manager_hmsw.py`（DQN / direct / sd_min / min_min / RR）    | 否，需要时手动启动 |
-| 8081           | `collect_8081`    | user01  | `~/appv8/manager/manager_hmsw_v2.py`，user01在用，**不要动** | 否                 |
+| 8081           | `collect_8081`    | user01  | `manager_hmsw_v2.py`（RL_MOTS / Ablation / algor_set），启停前先问 user01 | 否                 |
 | 8082           | `collect_8082_rr` | soar009 | XGB 数据采集 · Round Robin                                   | 是                 |
 | 8083           | `collect_8083`    | soar009 | XGB 数据采集 · Least Time `manager_xgbdata_collecter_lstt.py` | 是                 |
 | 8084           | `collect_8084`    | soar009 | XGB 数据采集 · handle_hdd v2（RR）                           | 是                 |
@@ -403,8 +403,7 @@ Python 版本锁定为 3.11，和 manager 系统的 Python 3.11.2 保持一致�
 
 ## 待办与注意
 
-- **8083 已迁入本仓库（2026-11-11）**，由 `deploy-host.sh` 安装 unit。原来 `~/appv8` 下的代码和本仓库一致，只是本仓库版本的 SSH 账号改从 `.env` 读取。
-- **8081 仍在 `~/appv8` 运行**（user01 的服务），使用 `~/apps/manager_server/.venv`。`host/manager/manager_hmsw_v2.py` 已和线上代码一致，依赖版本也一样，unit 模板 `ops/cluster/systemd/collect_8081.service` 已经备好，但部署脚本不会安装它。切换需要 user01 同意；切换之前，8081 的代码改动请在本仓库提交，再由 user01 同步到 `~/appv8`，不要只在 manager 上改。
+- **8081 和 8083 已迁入本仓库（2026-11-11）**，unit 由 `deploy-host.sh` 安装，使用本仓库的 venv。原来 `~/appv8` 下的代码和本仓库一致，只是本仓库版本的 SSH 账号改从 `.env` 读取。`~/appv8/manager/` 已经不再运行，**在那里改代码不会生效**，要改本仓库后部署。8081 和 8083 的日志现在写在 `$REMOTE_DIR/host/manager/log/`；旧日志还在 `~/appv8/manager/log/`。
 - **镜像和 stack 脚本仍然指向旧目录。** `build-image.sh`、`stack-start.sh` 和 `rebuild-swarm.sh` 读取 env 里的 `DOCKER_BUILD_DIR`、`STACK_COMPOSE` 和 `REBUILD_COMPOSE`，目前指向 `~/appv8` 和 `~/apps` 下的旧文件。要改用本仓库的 `image/`，把它们改成 `$REMOTE_DIR/image/...` 即可。
 - **有待清理的重复代码**：`hdd_config.json` 有 3 份；`host/manager/tasks/tasks/` 和 `tasks/` 重复；采集器有多个版本并存。
 - **安全**：2026-11-04 重写过 git 历史，去掉了明文密码和 IP。但仓库公开期间可能已经被别人拿到，建议修改各节点 `pi` 用户的密码，并同步更新 env 文件。

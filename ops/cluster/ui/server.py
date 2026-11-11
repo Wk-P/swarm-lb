@@ -1,7 +1,7 @@
 """swarm-lb 运维管理界面（manager :5000）
 
 只读：节点、swarm 服务、manager 上所有登记的 systemd 服务、各节点 agent 指标（含 30 分钟内存历史）。
-可写：仅 inventory.toml 中 owner 等于 [cluster].maintainer 的 unit 允许 start / stop / restart。
+可写：inventory.toml 中 managed = true（unit 由本仓库管理）或 owner 等于 [cluster].maintainer 的 unit 允许 start / stop / restart。
 """
 from __future__ import annotations
 
@@ -315,7 +315,7 @@ async def api_action(request: web.Request) -> web.Response:
     if svc is None:
         return web.json_response({"ok": False, "msg": "unit 未在 inventory.toml 登记"}, status=404)
     maintainer = load_inventory().get("cluster", {}).get("maintainer")
-    if not maintainer or svc.get("owner") != maintainer:
+    if not (svc.get("managed") or (maintainer and svc.get("owner") == maintainer)):
         return web.json_response({"ok": False, "msg": f"owner={svc.get('owner')}，不允许操作"}, status=403)
     if action not in ACTIONS or (svc.get("self") and action == "stop"):
         return web.json_response({"ok": False, "msg": "不支持的操作"}, status=400)

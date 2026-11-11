@@ -1331,7 +1331,7 @@
             restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>',
             logs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>',
         };
-        // owner 直接是人名；等于 cluster.maintainer 的可操作，其余只读
+        // owner 直接是人名。可操作：managed（unit 由本仓库管理）或属于 maintainer；操作别人的服务要二次确认
         const ownerChip = (owner, maintainer) =>
             !owner || owner === "unknown" ? ["未确认", "var(--ink-3)"]
                 : owner === maintainer ? [owner, "var(--n-manager)"]
@@ -1350,8 +1350,8 @@
                     slots = `<div class="slots" title="采集 worker 槽位 · 队列 ${q.queue_size}">${Object.values(q.worker_status).map(v => `<i class="${v === "idle" ? "" : "busy"}"></i>`).join("")}<span class="num">&nbsp;队列 ${q.queue_size}${q.total_tasks ? " · 累计 " + q.total_tasks : ""}</span></div>`;
                 } else if (q && q.error) slots = `<div class="slots">队列不可达</div>`;
                 else if (st.UnitFileState) slots = `<div class="slots">${st.UnitFileState === "enabled" ? "开机自启" : "不自启"}</div>`;
-                const canOp = !!ov.cluster.maintainer && s.owner === ov.cluster.maintainer && !missing;
-                const b = (a, label) => `<button class="act" data-unit="${esc(s.unit)}" data-act="${a}" title="${label}">${ICON[a]}</button>`;
+                const canOp = (!!s.managed || (!!ov.cluster.maintainer && s.owner === ov.cluster.maintainer)) && !missing;
+                const b = (a, label) => `<button class="act" data-unit="${esc(s.unit)}" data-act="${a}" data-owner="${esc(s.owner || "")}" title="${label}">${ICON[a]}</button>`;
                 const acts = (canOp ? (active ? (s.self ? b("restart", "重启界面") : b("restart", "重启") + b("stop", "停止")) : b("start", "启动")) : "")
                     + (missing ? "" : b("logs", "日志"));
                 return `<div class="svc ${active ? "" : "dim"}">
@@ -1469,8 +1469,11 @@
         $("svcs").addEventListener("click", async e => {
             const b = e.target.closest(".act");
             if (!b) return;
-            const { unit, act } = b.dataset;
+            const { unit, act, owner } = b.dataset;
             if (act === "logs") return showLogs(unit);
+            const me = (OV && OV.cluster && OV.cluster.maintainer) || "";
+            const verb = { start: "启动", stop: "停止", restart: "重启" }[act];
+            if (owner && owner !== me && !confirm(`${unit} 是 ${owner} 的服务，确定要${verb}吗？`)) return;
             const key = unit + "/" + act;
             if ((act === "stop" || act === "restart") && !armed.has(key)) {
                 b.classList.add("armed");

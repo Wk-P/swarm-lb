@@ -2,15 +2,15 @@
 # 运维界面 (ops/cluster/ui/) 和部署脚本 (ops/local/deploy-host.sh) 都读这个文件。
 # ${VAR} 是环境参数（envs/<环境名>.env，部署后为 manager 上的 .env），运维界面加载时展开。
 #
-# owner：服务的使用者/负责人，直接写人名（如 "soar009"、"user01"），未确认写 "unknown"。
-#   owner == [cluster].maintainer 的 unit：运维界面可启停/重启；deploy 脚本会安装其 unit（还需 managed = true）
-#   其他 owner：只读展示，任何脚本都不得修改其 unit / venv / 代码目录
+# owner：服务的使用者/负责人，直接写人名（如 "soar009"、"user01"），未确认写 "unknown"。只用于显示和操作提示。
+# managed = true：unit 模板在 ops/cluster/systemd/，deploy 脚本安装它，运维界面可启停（不是 maintainer 的服务会二次确认）
+# 没有 managed：unit 不归本仓库管，只读展示；owner 是 maintainer 时运维界面仍可启停
 
 [cluster]
 stack = "collect_data_stack"
 image = "${DOCKER_IMAGE}"
 manager_ip = "${MANAGER_IP}"
-maintainer = "soar009"    # 本仓库的维护者：只有 owner 等于它的服务才允许运维界面操作、deploy 脚本安装
+maintainer = "soar009"    # 本仓库的维护者：运维界面操作别人（owner ≠ maintainer）的服务时会二次确认
 agent_port = 9100         # 每个节点上的监控 agent（ops/cluster/agent/node_agent.py，ops/local/deploy-agents.sh 部署）
 
 [[node]]
@@ -75,8 +75,9 @@ port = 8081
 unit = "collect_8081.service"
 owner = "user01"
 title = "manager_hmsw_v2（RL_MOTS / Ablation / algor_set）"
-script = "~/appv8/manager/manager_hmsw_v2.py"
-note = "user01使用，勿动。仍用 ~/apps/manager_server/.venv + ~/appv8。代码已与 host/manager/manager_hmsw_v2.py 一致，unit 模板 ops/cluster/systemd/collect_8081.service 已备好（deploy 不会安装）；切换需 user01 同意"
+script = "host/manager/manager_hmsw_v2.py"
+managed = true
+note = "user01 使用。2026-11-11 从 ~/appv8 迁入本仓库（代码与原版一致，仅 SSH 账号改读 .env）。改代码请改仓库后部署"
 
 [[service]]
 port = 8082
