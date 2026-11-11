@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  node-v6:
+    image: soar009/node-service-image:v66
+    deploy:
+      replicas: 3
+      placement:
+        constraints:
+          - node.role == worker
+        max_replicas_per_node: 1
+      resources:
+        limits:
+          cpus: "0.8"
+    ports:
+      - target: 8081
+        published: 8081
+        protocol: tcp
+        mode: host
+    environment:
+      - WORKER_ID={{.Node.Hostname}}
+    networks:
+      - node-service-net-v6
+
+networks:
+  node-service-net-v6:
+    driver: overlay
