@@ -1,3 +1,8 @@
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+# ↑ 只用标准库：uv run 时不安装项目依赖，也不要求 Python 3.11；没有 uv 时直接 python 运行也可以
 """【开发机执行】把节点监控 agent（ops/cluster/agent/）部署到集群所有节点。
 
     uv run ops/local/deploy_agents.py <环境名>                  # 全部节点（manager + workers）

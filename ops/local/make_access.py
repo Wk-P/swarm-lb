@@ -1,3 +1,8 @@
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+# ↑ 只用标准库：uv run 时不安装项目依赖，也不要求 Python 3.11；没有 uv 时直接 python 运行也可以
 """【开发机执行】给新成员生成集群访问包（zip）。
 
     uv run ops/local/make_access.py <环境名> <成员名>          # 例：uv run ops/local/make_access.py lab user02

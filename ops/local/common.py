@@ -1,6 +1,7 @@
 """ops/local/ 各脚本的公共部分（开发机执行，Linux / macOS / Windows 通用，只用标准库）。
 
 运行方式：在仓库根目录执行  uv run ops/local/<脚本>.py <环境名> [参数...]
+没有 uv 时也可以用 Python 3.9+ 直接运行：python ops/local/<脚本>.py …（common.py 本身不能单独运行）
 环境名也可以用环境变量 SWARM_ENV 指定。
 
 依赖本机的 ssh 客户端：Linux/macOS 自带；Windows 用系统自带的 OpenSSH（PowerShell 里的 ssh）

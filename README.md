@@ -100,12 +100,16 @@ manager 上的 5 个调度器/采集器（8080–8084）**共用同一个 stack*
 
 > 只想**查看状态、启停采集器、看日志**的话，什么都不用装，浏览器打开 `http://<manager IP>:5000/` 就行（运维界面，在同一网段内都能访问）。
 
-开发机上的运维脚本都是 Python（`ops/local/*.py`，只用标准库），用 `uv run` 运行，Linux、macOS、Windows（PowerShell 或 Git Bash）都一样：
+开发机上的运维脚本都是 Python（`ops/local/*.py`，只用标准库），Linux、macOS、Windows（PowerShell 或 Git Bash）用法一样。**推荐装 uv**，用 `uv run` 运行：
 
 ```bash
 uv run ops/local/deploy_host.py lab        # 部署
 uv run ops/local/remote.py lab <脚本名>     # 在 manager 上执行集群内脚本
 ```
+
+- 有 uv 就够了，本机不用另外装 Python：脚本头部写了 `requires-python = ">=3.9"`，本机没有合适的 Python 时 uv 会自动下载一个；`uv run` 运行这几个脚本时也不会安装项目依赖（pandas、torch 等），第一次运行很快。
+- 没有 uv 也能用：装 Python 3.9 及以上，直接执行 `python ops/local/deploy_host.py lab`，命令的其余部分不变（Linux/macOS 上可能叫 `python3`）。Windows 上要装 python.org 的正式版本，Microsoft Store 自带的 `python` 只是一个跳转到商店的占位程序。
+- 只有在本机跑客户端（`clients/`）或调试 `host/` 代码时才需要 `uv sync`，这时用的是 `pyproject.toml` 指定的 Python 3.11，uv 同样会自动下载。
 
 ```mermaid
 flowchart TD
@@ -144,12 +148,12 @@ zip 里有**私钥和密码**，要私下交给对方（当面拷贝或内网共
 
 | | Linux / macOS | Windows |
 | --- | --- | --- |
-| 需要安装 | git、[uv](https://docs.astral.sh/uv/) | [Git for Windows](https://git-scm.com/download/win)、uv |
+| 需要安装 | git、[uv](https://docs.astral.sh/uv/)（不用另装 Python） | [Git for Windows](https://git-scm.com/download/win)、uv（不用另装 Python） |
 | 安装 uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | PowerShell：`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
 | 终端 | 系统自带终端 | PowerShell 或 Git Bash 都可以 |
 | 私钥权限 | `chmod 600 ~/.ssh/swarm_lb_<成员名>_ed25519` | 用 `icacls` 收紧权限，否则 Windows 自带的 ssh 会拒绝使用（zip 说明里有命令） |
 
-两边共同的步骤：私钥复制到 `~/.ssh/`（Windows 是 `C:\Users\<你>\.ssh\`），`ssh_config.txt` 追加到 `~/.ssh/config`，clone 仓库，`lab.env` 放到 `envs/lab.env`，`uv sync`。
+两边共同的步骤：私钥复制到 `~/.ssh/`（Windows 是 `C:\Users\<你>\.ssh\`），`ssh_config.txt` 追加到 `~/.ssh/config`，clone 仓库，`lab.env` 放到 `envs/lab.env`。`uv sync` 只在本机要跑客户端时才需要。
 
 ### 3. 验证
 

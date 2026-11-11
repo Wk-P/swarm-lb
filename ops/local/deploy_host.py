@@ -1,3 +1,8 @@
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+# ↑ 只用标准库：uv run 时不安装项目依赖，也不要求 Python 3.11；没有 uv 时直接 python 运行也可以
 """【开发机执行】把仓库部署到集群宿主机（manager）的 $REMOTE_DIR，并安装/更新 systemd unit。
 
     uv run ops/local/deploy_host.py <环境名>              # 同步代码 + .env + uv sync + 安装 unit，重启运维界面

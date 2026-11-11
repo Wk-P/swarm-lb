@@ -12,7 +12,8 @@
 
 > 只想**查看状态、启停采集器、看日志**的话，不用做下面任何配置：在同一个 192.168.1.x 网段里，用浏览器打开 `http://<manager IP>:5000/` 就行（manager IP 见 `@ENV@.env` 里的 `MANAGER_IP`）。
 
-本机要跑的运维脚本都是 Python（`ops/local/*.py`），用 `uv run` 运行：Linux、macOS 用终端，Windows 用 **PowerShell**（Git Bash 也可以）。
+本机要跑的运维脚本都是 Python（`ops/local/*.py`，只用标准库），用 `uv run` 运行：Linux、macOS 用终端，Windows 用 **PowerShell**（Git Bash 也可以）。
+**只需要装 uv，不用另外装 Python**，缺 Python 时 uv 会自动下载。实在装不了 uv 的话，装 Python 3.9 及以上，把下面命令里的 `uv run` 换成 `python`（Linux/macOS 上可能是 `python3`）也能用。
 
 ---
 
@@ -45,7 +46,7 @@ git config --global user.name  "@NAME@"          # 部署记录里会显示这�
 git config --global user.email "<你的邮箱>"
 git clone https://github.com/Wk-P/swarm-lb.git
 cp @ENV@.env swarm-lb/envs/@ENV@.env
-cd swarm-lb && uv sync
+cd swarm-lb
 ```
 
 ### 4. 验证
@@ -95,7 +96,6 @@ cd D:\projects                                    # 换成你想放的位置
 git clone https://github.com/Wk-P/swarm-lb.git
 Copy-Item $HOME\Downloads\@NAME@-access\@ENV@.env swarm-lb\envs\@ENV@.env   # 路径换成你的解压目录
 cd swarm-lb
-uv sync
 ```
 
 ### 4. 验证

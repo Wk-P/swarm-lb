@@ -1,3 +1,8 @@
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+# ↑ 只用标准库：uv run 时不安装项目依赖，也不要求 Python 3.11；没有 uv 时直接 python 运行也可以
 """【开发机执行】在 manager 上运行集群内运维脚本（ops/cluster/bin/，需先 deploy_host.py 部署过去）。
 
     uv run ops/local/remote.py <环境名>                          # 列出可用脚本
